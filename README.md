@@ -69,6 +69,34 @@ const result = compile("SELECT id, name FROM projects WHERE tenant_id = ?", {
 
 This emits SQL against `internal_projects`, while the user can keep writing `projects`.
 
+## Policies
+
+Policies are higher-level compiler features that can both rewrite queries and enforce invariants.
+
+Built-in policies hide low-level AST and binding details from library users. For example, `tenantScopingPolicy(...)` can inject tenant filters automatically:
+
+```ts
+import { compile, createTestCatalog, tenantScopingPolicy } from "voight";
+
+const result = compile("SELECT metric FROM timeseries", {
+    catalog: createTestCatalog(),
+    dialect: "mysql",
+    policies: [
+        tenantScopingPolicy({
+            tables: ["timeseries"],
+            scopeColumn: "tenant_id",
+            contextKey: "tenantId",
+        }),
+    ],
+    policyContext: {
+        tenantId: "tenant-123",
+    },
+    strict: true,
+});
+```
+
+This rewrites the query so every `timeseries` scan is scoped to the provided tenant. Policies also work through nested query blocks such as CTEs and derived tables.
+
 ## Diagnostics
 
 Failures are reported at the stage where they happen.
@@ -88,6 +116,6 @@ console.log(result.diagnostics[0]?.message); // Unknown table "missing".
 ## Development
 
 ```bash
-npm install
-npm test
+bun install
+bun test
 ```
