@@ -17,5 +17,15 @@ export function createTestCatalog(): InMemoryCatalog {
             path: ["orders"],
             columns: ["id", "user_id", "total", "total_cents", "tenant_id", "status", "created_at"],
         }),
+        createTableSchema({
+            id: "internal_projects",
+            path: ["internal_projects"],
+            columns: ["id", "name", "tenant_id", "created_at"],
+        }),
+        createTableSchema({
+            id: "timeseries",
+            path: ["timeseries"],
+            columns: ["id", "tenant_id", "metric", "timestamp", "value"],
+        }),
     ]);
 }

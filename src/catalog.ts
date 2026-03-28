@@ -20,6 +20,11 @@ export interface Catalog {
     resolveColumn(table: TableSchema, columnName: string): ColumnSchema | null;
 }
 
+export interface CatalogTableAlias {
+    readonly from: IdentifierPath;
+    readonly to: IdentifierPath;
+}
+
 export class InMemoryCatalog implements Catalog {
     readonly #tables: Map<string, TableSchema>;
 
@@ -69,4 +74,38 @@ export function normalizeIdentifier(value: string): string {
 
 function normalizeIdentifierPath(path: IdentifierPath): string {
     return path.parts.map(normalizeIdentifier).join(".");
+}
+
+export class AliasCatalog implements Catalog {
+    readonly #catalog: Catalog;
+    readonly #aliases: Map<string, IdentifierPath>;
+
+    constructor(catalog: Catalog, aliases: readonly CatalogTableAlias[]) {
+        this.#catalog = catalog;
+        this.#aliases = new Map(
+            aliases.map((alias) => [
+                normalizeIdentifierPath(alias.from),
+                createIdentifierPath(...alias.to.parts),
+            ]),
+        );
+    }
+
+    getTable(name: IdentifierPath): TableSchema | null {
+        const aliased = this.#aliases.get(normalizeIdentifierPath(name));
+        return this.#catalog.getTable(aliased ?? name);
+    }
+
+    resolveColumn(table: TableSchema, columnName: string): ColumnSchema | null {
+        return this.#catalog.resolveColumn(table, columnName);
+    }
+}
+
+export function createCatalogAlias(input: {
+    from: readonly string[];
+    to: readonly string[];
+}): CatalogTableAlias {
+    return {
+        from: createIdentifierPath(...input.from),
+        to: createIdentifierPath(...input.to),
+    };
 }

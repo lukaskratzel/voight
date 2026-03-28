@@ -1,13 +1,16 @@
 import {
     type BinaryExpressionNode,
+    type CommonTableExpressionNode,
     type CurrentKeywordExpressionNode,
     type DerivedTableReferenceNode,
+    type ExistsExpressionNode,
     type ExpressionNode,
     type FunctionCallNode,
     type GroupingExpressionNode,
     type IdentifierExpressionNode,
     type IdentifierNode,
     type InListExpressionNode,
+    type InSubqueryExpressionNode,
     type IsNullExpressionNode,
     type JoinNode,
     type LimitClauseNode,
@@ -16,6 +19,8 @@ import {
     type ParameterNode,
     type QualifiedNameNode,
     type QualifiedReferenceNode,
+    type QueryAst,
+    type ScalarSubqueryExpressionNode,
     type SelectExpressionItemNode,
     type SelectItemNode,
     type SelectStatementAst,
@@ -23,39 +28,38 @@ import {
     type TableReferenceNode,
     type UnaryExpressionNode,
     type WildcardExpressionNode,
+    type WithClauseNode,
 } from "./ast";
-import { CompilerStage, DiagnosticCode, createDiagnostic, type Diagnostic } from "./diagnostics";
+import { CompilerStage, DiagnosticCode, createDiagnostic } from "./diagnostics";
 import { stageFailure, stageSuccess, type StageResult } from "./result";
 import { mergeSpans } from "./source";
 import type { Token, TokenStream } from "./lexer";
 
 export type ParseResult<T> = StageResult<T, CompilerStage.Parser, { tokenIndex: number }>;
 
-export function parse(tokens: TokenStream): ParseResult<SelectStatementAst> {
+export function parse(tokens: TokenStream): ParseResult<QueryAst> {
     const parser = new Parser(tokens);
     return parser.parse();
 }
 
 class Parser {
     readonly #tokens: readonly Token[];
-    readonly #stream: TokenStream;
     #index = 0;
 
     constructor(stream: TokenStream) {
-        this.#stream = stream;
         this.#tokens = stream.tokens;
     }
 
-    parse(): ParseResult<SelectStatementAst> {
+    parse(): ParseResult<QueryAst> {
         try {
-            const statement = this.parseSelectStatement();
+            const query = this.parseQuery();
             if (this.consume("semicolon")) {
                 this.expect("eof");
             } else {
                 this.expect("eof");
             }
 
-            return stageSuccess(CompilerStage.Parser, statement, {
+            return stageSuccess(CompilerStage.Parser, query, {
                 tokenIndex: this.#index,
             });
         } catch (error) {
@@ -75,6 +79,61 @@ class Parser {
         }
     }
 
+    parseQuery(): QueryAst {
+        const withClause = this.matchKeyword("WITH") ? this.parseWithClause() : undefined;
+        const body = this.parseSelectStatement();
+        return {
+            kind: "Query",
+            span: withClause ? mergeSpans(withClause.span, body.span) : body.span,
+            with: withClause,
+            body,
+        };
+    }
+
+    parseWithClause(): WithClauseNode {
+        const withToken = this.expectKeyword("WITH");
+        const ctes: CommonTableExpressionNode[] = [this.parseCommonTableExpression()];
+        while (this.consume("comma")) {
+            ctes.push(this.parseCommonTableExpression());
+        }
+
+        return {
+            kind: "WithClause",
+            span: mergeSpans(withToken.span, ctes[ctes.length - 1]!.span),
+            ctes,
+        };
+    }
+
+    parseCommonTableExpression(): CommonTableExpressionNode {
+        const name = this.parseIdentifier();
+        const columns = this.parseOptionalColumnList();
+        this.expectKeyword("AS");
+        this.expect("left_paren");
+        const query = this.parseQuery();
+        const end = this.expect("right_paren");
+
+        return {
+            kind: "CommonTableExpression",
+            span: mergeSpans(name.span, end.span),
+            name,
+            columns,
+            query,
+        };
+    }
+
+    parseOptionalColumnList(): readonly IdentifierNode[] {
+        if (!this.consume("left_paren")) {
+            return [];
+        }
+
+        const columns = [this.parseIdentifier()];
+        while (this.consume("comma")) {
+            columns.push(this.parseIdentifier());
+        }
+        this.expect("right_paren");
+        return columns;
+    }
+
     parseSelectStatement(): SelectStatementAst {
         const selectToken = this.expectKeyword("SELECT");
         const selectItems = this.parseSelectList();
@@ -83,9 +142,7 @@ class Parser {
 
         while (
             from &&
-            (this.matchKeyword("INNER") ||
-                this.matchKeyword("LEFT") ||
-                this.matchKeyword("JOIN"))
+            (this.matchKeyword("INNER") || this.matchKeyword("LEFT") || this.matchKeyword("JOIN"))
         ) {
             joins.push(this.parseJoin());
         }
@@ -150,12 +207,11 @@ class Parser {
                 kind: "SelectWildcardItem",
                 qualifier,
                 span: mergeSpans(qualifier.span, star.span),
-            };
+            } satisfies SelectWildcardItemNode;
         }
 
         const expression = this.parseExpression();
         const alias = this.parseOptionalAlias();
-
         return {
             kind: "SelectExpressionItem",
             span: alias ? mergeSpans(expression.span, alias.span) : expression.span,
@@ -186,22 +242,14 @@ class Parser {
     parseTableReference(): TableReferenceNode {
         if (this.consume("left_paren")) {
             const start = this.previous().span;
-            if (!(this.current().kind === "keyword" && this.current().keyword === "SELECT")) {
-                throw this.error(
-                    DiagnosticCode.UnsupportedConstruct,
-                    "Only derived SELECT subqueries are supported in table position.",
-                    this.current().span,
-                );
-            }
-
-            const subquery = this.parseSelectStatement();
-            const end = this.expect("right_paren");
+            const query = this.parseQuery();
+            this.expect("right_paren");
             const alias = this.parseRequiredAlias();
 
             return {
                 kind: "DerivedTableReference",
                 span: mergeSpans(start, alias.span),
-                subquery,
+                subquery: query,
                 alias,
             } satisfies DerivedTableReferenceNode;
         }
@@ -223,7 +271,6 @@ class Parser {
 
         if (this.consumeKeyword("INNER")) {
             this.expectKeyword("JOIN");
-            joinType = "INNER";
         } else if (this.consumeKeyword("LEFT")) {
             joinType = "LEFT";
             this.expectKeyword("JOIN");
@@ -349,26 +396,12 @@ class Parser {
         }
 
         if (this.consumeKeyword("IN")) {
-            const values = this.parseInListValues();
-            return {
-                kind: "InListExpression",
-                span: mergeSpans(expression.span, values[values.length - 1]!.span),
-                operand: expression,
-                values,
-                negated: false,
-            } satisfies InListExpressionNode;
+            return this.parseInPredicate(expression, false);
         }
 
         if (this.consumeKeyword("NOT")) {
             if (this.consumeKeyword("IN")) {
-                const values = this.parseInListValues();
-                return {
-                    kind: "InListExpression",
-                    span: mergeSpans(expression.span, values[values.length - 1]!.span),
-                    operand: expression,
-                    values,
-                    negated: true,
-                } satisfies InListExpressionNode;
+                return this.parseInPredicate(expression, true);
             }
 
             throw this.error(
@@ -398,6 +431,34 @@ class Parser {
         }
 
         return expression;
+    }
+
+    parseInPredicate(operand: ExpressionNode, negated: boolean): ExpressionNode {
+        this.expect("left_paren");
+        if (this.isQueryStart()) {
+            const query = this.parseQuery();
+            const end = this.expect("right_paren");
+            return {
+                kind: "InSubqueryExpression",
+                span: mergeSpans(operand.span, end.span),
+                operand,
+                query,
+                negated,
+            } satisfies InSubqueryExpressionNode;
+        }
+
+        const values: ExpressionNode[] = [this.parseExpression()];
+        while (this.consume("comma")) {
+            values.push(this.parseExpression());
+        }
+        const end = this.expect("right_paren");
+        return {
+            kind: "InListExpression",
+            span: mergeSpans(operand.span, end.span),
+            operand,
+            values,
+            negated,
+        } satisfies InListExpressionNode;
     }
 
     parseAdditiveExpression(): ExpressionNode {
@@ -456,6 +517,16 @@ class Parser {
         }
 
         if (this.consumeKeyword("NOT")) {
+            if (this.consumeKeyword("EXISTS")) {
+                const query = this.parseParenthesizedQuery();
+                return {
+                    kind: "ExistsExpression",
+                    span: mergeSpans(this.previous().span, query.span),
+                    query,
+                    negated: true,
+                } satisfies ExistsExpressionNode;
+            }
+
             const operand = this.parseUnaryExpression();
             return {
                 kind: "UnaryExpression",
@@ -463,6 +534,17 @@ class Parser {
                 operator: "NOT",
                 operand,
             } satisfies UnaryExpressionNode;
+        }
+
+        if (this.consumeKeyword("EXISTS")) {
+            const existsToken = this.previous();
+            const query = this.parseParenthesizedQuery();
+            return {
+                kind: "ExistsExpression",
+                span: mergeSpans(existsToken.span, query.span),
+                query,
+                negated: false,
+            } satisfies ExistsExpressionNode;
         }
 
         return this.parsePrimaryExpression();
@@ -475,12 +557,14 @@ class Parser {
             const start = current.span;
             this.advance();
 
-            if (this.current().kind === "keyword" && this.current().keyword === "SELECT") {
-                throw this.error(
-                    DiagnosticCode.UnsupportedConstruct,
-                    "Subqueries are only supported in table position.",
-                    current.span,
-                );
+            if (this.isQueryStart()) {
+                const query = this.parseQuery();
+                const end = this.expect("right_paren");
+                return {
+                    kind: "ScalarSubqueryExpression",
+                    span: mergeSpans(start, end.span),
+                    query,
+                } satisfies ScalarSubqueryExpressionNode;
             }
 
             const expression = this.parseExpression();
@@ -529,29 +613,29 @@ class Parser {
             } satisfies LiteralNode;
         }
 
-    if (current.kind === "keyword" && current.keyword === "NULL") {
-      this.advance();
-      return {
-        kind: "Literal",
+        if (current.kind === "keyword" && current.keyword === "NULL") {
+            this.advance();
+            return {
+                kind: "Literal",
                 span: current.span,
                 literalType: "null",
                 value: null,
-      } satisfies LiteralNode;
-    }
+            } satisfies LiteralNode;
+        }
 
-    if (
-      current.kind === "keyword" &&
-      (current.keyword === "CURRENT_TIMESTAMP" ||
-        current.keyword === "CURRENT_DATE" ||
-        current.keyword === "CURRENT_TIME")
-    ) {
-      this.advance();
-      return {
-        kind: "CurrentKeywordExpression",
-        span: current.span,
-        keyword: current.keyword,
-      } satisfies CurrentKeywordExpressionNode;
-    }
+        if (
+            current.kind === "keyword" &&
+            (current.keyword === "CURRENT_TIMESTAMP" ||
+                current.keyword === "CURRENT_DATE" ||
+                current.keyword === "CURRENT_TIME")
+        ) {
+            this.advance();
+            return {
+                kind: "CurrentKeywordExpression",
+                span: current.span,
+                keyword: current.keyword,
+            } satisfies CurrentKeywordExpressionNode;
+        }
 
         if (current.kind === "asterisk") {
             this.advance();
@@ -623,6 +707,16 @@ class Parser {
         );
     }
 
+    parseParenthesizedQuery(): QueryAst {
+        const start = this.expect("left_paren");
+        const query = this.parseQuery();
+        const end = this.expect("right_paren");
+        return {
+            ...query,
+            span: mergeSpans(start.span, end.span),
+        };
+    }
+
     parseQualifiedName(): QualifiedNameNode {
         const parts = [this.parseIdentifier()];
         while (this.consume("dot")) {
@@ -667,14 +761,11 @@ class Parser {
         return this.parseIdentifier();
     }
 
-    parseInListValues(): readonly ExpressionNode[] {
-        this.expect("left_paren");
-        const values: ExpressionNode[] = [this.parseExpression()];
-        while (this.consume("comma")) {
-            values.push(this.parseExpression());
-        }
-        this.expect("right_paren");
-        return values;
+    isQueryStart(): boolean {
+        return (
+            (this.current().kind === "keyword" && this.current().keyword === "SELECT") ||
+            (this.current().kind === "keyword" && this.current().keyword === "WITH")
+        );
     }
 
     current(): Token {
@@ -776,16 +867,12 @@ class Parser {
 }
 
 class ParserDiagnosticError extends Error {
-    readonly diagnostic: Diagnostic;
+    readonly diagnostic;
 
-    constructor(diagnostic: Diagnostic) {
+    constructor(diagnostic: ReturnType<typeof createDiagnostic>) {
         super(diagnostic.message);
         this.diagnostic = diagnostic;
     }
-}
-
-function decodeStringLiteral(value: string): string {
-    return value.slice(1, -1).replace(/''/g, "'");
 }
 
 function createNumericLiteral(token: Token): LiteralNode {
@@ -795,4 +882,8 @@ function createNumericLiteral(token: Token): LiteralNode {
         literalType: token.text.includes(".") ? "decimal" : "integer",
         value: token.text,
     };
+}
+
+function decodeStringLiteral(text: string): string {
+    return text.slice(1, -1).replace(/''/g, "'");
 }

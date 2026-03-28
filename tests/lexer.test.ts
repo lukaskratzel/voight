@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 
 import { DiagnosticCode } from "../src/diagnostics";
 import { tokenize } from "../src/lexer";
@@ -57,9 +57,7 @@ describe("tokenize", () => {
             return;
         }
 
-        expect(result.diagnostics[0]?.code).toBe(
-            DiagnosticCode.UnterminatedQuotedIdentifier,
-        );
+        expect(result.diagnostics[0]?.code).toBe(DiagnosticCode.UnterminatedQuotedIdentifier);
     });
 
     test("fails on unexpected characters", () => {

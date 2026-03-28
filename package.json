@@ -1,17 +1,20 @@
 {
-    "name": "alchemist",
+    "name": "voight",
     "private": true,
     "type": "module",
     "module": "index.ts",
     "scripts": {
         "fmt": "oxfmt",
-        "fmt:check": "oxfmt --check"
+        "fmt:check": "oxfmt --check",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "ts:check": "tsc --noEmit"
     },
     "devDependencies": {
-        "@types/bun": "latest",
-        "oxfmt": "^0.42.0"
+        "oxfmt": "^0.42.0",
+        "vitest": "^4.1.2"
     },
     "peerDependencies": {
-        "typescript": "^5"
+        "typescript": "^6"
     }
 }

@@ -3,7 +3,10 @@ import { getLocation, type SourceFile, type SourceSpan } from "./source";
 export enum CompilerStage {
     Lexer = "lexer",
     Parser = "parser",
+    Rewriter = "rewriter",
     Binder = "binder",
+    Analyzer = "analyzer",
+    Enforcer = "enforcer",
     Validator = "validator",
     Emitter = "emitter",
     Compiler = "compiler",
@@ -30,6 +33,8 @@ export enum DiagnosticCode {
     DisallowedFunction = "disallowed-function",
     UnsupportedOperator = "unsupported-operator",
     LimitExceeded = "limit-exceeded",
+    PolicyViolation = "policy-violation",
+    RewriteInvariantViolation = "rewrite-invariant-violation",
     EmitInvariantViolation = "emit-invariant-violation",
 }
 

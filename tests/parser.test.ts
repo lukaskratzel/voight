@@ -1,11 +1,11 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 
 import { DiagnosticCode } from "../src/diagnostics";
 import { tokenize } from "../src/lexer";
 import { parse } from "../src/parser";
 
 describe("parse", () => {
-    test("parses select with join, grouping, ordering, and limit", () => {
+    test("parses a query wrapper with join, grouping, ordering, and limit", () => {
         const tokens = tokenize(
             "SELECT u.id, SUM(o.total) AS total FROM users u INNER JOIN orders o ON u.id = o.user_id WHERE u.tenant_id = ? GROUP BY u.id HAVING SUM(o.total) > 10 ORDER BY total DESC LIMIT 5 OFFSET 2",
         );
@@ -20,28 +20,57 @@ describe("parse", () => {
             return;
         }
 
-        expect(result.value.kind).toBe("SelectStatement");
-        expect(result.value.selectItems).toHaveLength(2);
-        expect(result.value.joins).toHaveLength(1);
-        expect(result.value.groupBy).toHaveLength(1);
-        expect(result.value.orderBy).toHaveLength(1);
-        expect(result.value.limit?.offset?.kind).toBe("Literal");
+        expect(result.value.kind).toBe("Query");
+        expect(result.value.body.kind).toBe("SelectStatement");
+        expect(result.value.body.selectItems).toHaveLength(2);
+        expect(result.value.body.joins).toHaveLength(1);
+        expect(result.value.body.groupBy).toHaveLength(1);
+        expect(result.value.body.orderBy).toHaveLength(1);
+        expect(result.value.body.limit?.offset?.kind).toBe("Literal");
     });
 
-    test("rejects subqueries", () => {
-        const tokens = tokenize("SELECT id FROM users WHERE id IN (SELECT user_id FROM orders)");
+    test("parses scalar and IN subqueries", () => {
+        const tokens = tokenize(
+            "SELECT id, (SELECT COUNT(*) FROM orders o WHERE o.user_id = users.id) AS order_count FROM users WHERE id IN (SELECT user_id FROM orders)",
+        );
         expect(tokens.ok).toBe(true);
         if (!tokens.ok) {
             return;
         }
 
         const result = parse(tokens.value);
-        expect(result.ok).toBe(false);
-        if (result.ok) {
+        expect(result.ok).toBe(true);
+        if (!result.ok) {
             return;
         }
 
-        expect(result.diagnostics[0]?.code).toBe(DiagnosticCode.UnsupportedConstruct);
+        expect(result.value.body.selectItems[1]?.kind).toBe("SelectExpressionItem");
+        if (result.value.body.selectItems[1]?.kind === "SelectExpressionItem") {
+            expect(result.value.body.selectItems[1].expression.kind).toBe(
+                "ScalarSubqueryExpression",
+            );
+        }
+
+        expect(result.value.body.where?.kind).toBe("InSubqueryExpression");
+    });
+
+    test("parses CTEs", () => {
+        const tokens = tokenize(
+            "WITH recent_orders AS (SELECT user_id FROM orders) SELECT user_id FROM recent_orders",
+        );
+        expect(tokens.ok).toBe(true);
+        if (!tokens.ok) {
+            return;
+        }
+
+        const result = parse(tokens.value);
+        expect(result.ok).toBe(true);
+        if (!result.ok) {
+            return;
+        }
+
+        expect(result.value.with?.ctes).toHaveLength(1);
+        expect(result.value.with?.ctes[0]?.name.name).toBe("recent_orders");
     });
 
     test("rejects unsupported statements", () => {
@@ -73,10 +102,10 @@ describe("parse", () => {
             return;
         }
 
-        expect(result.value.selectItems[0]?.kind).toBe("SelectWildcardItem");
-        expect(result.value.selectItems[1]?.kind).toBe("SelectWildcardItem");
-        expect(result.value.limit?.offset?.kind).toBe("Literal");
-        expect(result.value.limit?.count.kind).toBe("Literal");
+        expect(result.value.body.selectItems[0]?.kind).toBe("SelectWildcardItem");
+        expect(result.value.body.selectItems[1]?.kind).toBe("SelectWildcardItem");
+        expect(result.value.body.limit?.offset?.kind).toBe("Literal");
+        expect(result.value.body.limit?.count.kind).toBe("Literal");
     });
 
     test("rejects unexpected end of input", () => {
@@ -108,8 +137,8 @@ describe("parse", () => {
             return;
         }
 
-        expect(result.value.from?.alias?.quoted).toBe(true);
-        expect(result.value.orderBy[0]?.direction).toBe("ASC");
+        expect(result.value.body.from?.alias?.quoted).toBe(true);
+        expect(result.value.body.orderBy[0]?.direction).toBe("ASC");
     });
 
     test("parses select without from", () => {
@@ -125,8 +154,8 @@ describe("parse", () => {
             return;
         }
 
-        expect(result.value.from).toBeUndefined();
-        expect(result.value.selectItems).toHaveLength(1);
+        expect(result.value.body.from).toBeUndefined();
+        expect(result.value.body.selectItems).toHaveLength(1);
     });
 
     test("parses CURRENT_* expressions and trailing semicolon", () => {

@@ -2,17 +2,23 @@ import {
     type BinaryExpressionNode,
     type BoundBinaryExpression,
     type BoundColumnReference,
+    type BoundCommonTableExpression,
     type BoundCurrentKeywordExpression,
+    type BoundExistsExpression,
     type BoundExpression,
     type BoundFunctionCall,
     type BoundGroupingExpression,
     type BoundInListExpression,
+    type BoundInSubqueryExpression,
     type BoundIsNullExpression,
     type BoundJoin,
     type BoundLimitClause,
     type BoundLiteral,
     type BoundOrderByItem,
+    type BoundOutputColumn,
     type BoundParameter,
+    type BoundQuery,
+    type BoundScalarSubqueryExpression,
     type BoundScope,
     type BoundSelectExpressionItem,
     type BoundSelectItem,
@@ -21,51 +27,170 @@ import {
     type BoundTableReference,
     type BoundUnaryExpression,
     type BoundWildcardExpression,
+    type BoundWithClause,
+    type CommonTableExpressionNode,
     type DerivedTableReferenceNode,
+    type ExistsExpressionNode,
     type ExpressionNode,
     type GroupingExpressionNode,
     type IdentifierExpressionNode,
     type InListExpressionNode,
+    type InSubqueryExpressionNode,
     type IsNullExpressionNode,
+    type QueryAst,
     type QualifiedReferenceNode,
-    type SelectExpressionItemNode,
+    type ScalarSubqueryExpressionNode,
     type SelectItemNode,
     type SelectStatementAst,
-    type SelectWildcardItemNode,
     type TableReferenceNode,
     type UnaryExpressionNode,
     type WildcardExpressionNode,
+    type WithClauseNode,
 } from "./ast";
 import { type Catalog, normalizeIdentifier, type ColumnSchema, type TableSchema } from "./catalog";
-import { CompilerStage, DiagnosticCode, createDiagnostic, type Diagnostic } from "./diagnostics";
+import { CompilerStage, DiagnosticCode, createDiagnostic } from "./diagnostics";
 import { stageFailure, stageSuccess, type StageResult } from "./result";
 import type { SourceSpan } from "./source";
 
 export type BindResult<T> = StageResult<T, CompilerStage.Binder, { scopeSize: number }>;
 
-interface BinderScope {
+interface BinderScopeFrame {
     readonly tables: Map<string, BoundTableReference>;
+    readonly parent?: BinderScopeFrame;
 }
 
-export function bind(ast: SelectStatementAst, catalog: Catalog): BindResult<BoundSelectStatement> {
-    const binder = new Binder(ast, catalog);
-    return binder.bind();
+interface BinderContext {
+    readonly ctes: Map<string, BoundCommonTableExpression>;
+    readonly parentScope?: BinderScopeFrame;
+}
+
+export function bind(ast: QueryAst, catalog: Catalog): BindResult<BoundQuery> {
+    const binder = new Binder(ast, catalog, {
+        ctes: new Map(),
+    });
+    return binder.bindQuery();
 }
 
 class Binder {
-    readonly #ast: SelectStatementAst;
+    readonly #ast: QueryAst | SelectStatementAst;
     readonly #catalog: Catalog;
-    readonly #scope: BinderScope = {
-        tables: new Map(),
-    };
+    readonly #context: BinderContext;
+    readonly #scope: BinderScopeFrame;
     readonly #selectAliases = new Map<string, BoundExpression>();
 
-    constructor(ast: SelectStatementAst, catalog: Catalog) {
+    constructor(ast: QueryAst | SelectStatementAst, catalog: Catalog, context: BinderContext) {
         this.#ast = ast;
         this.#catalog = catalog;
+        this.#context = context;
+        this.#scope = {
+            tables: new Map(),
+            parent: context.parentScope,
+        };
     }
 
-    bind(): BindResult<BoundSelectStatement> {
+    bindQuery(): BindResult<BoundQuery> {
+        if (this.#ast.kind !== "Query") {
+            throw new Error("bindQuery requires a Query AST.");
+        }
+
+        const withClause = this.#ast.with ? this.bindWithClause(this.#ast.with) : undefined;
+        if (withClause && !withClause.ok) {
+            return withClause;
+        }
+
+        const bodyBinder = new Binder(this.#ast.body, this.#catalog, {
+            ctes: withClause?.value
+                ? new Map(withClause.value.ctes.map((cte) => [cte.name, cte]))
+                : this.#context.ctes,
+            parentScope: this.#context.parentScope,
+        });
+        const body = bodyBinder.bindSelectStatement();
+        if (!body.ok) {
+            return body;
+        }
+
+        return stageSuccess(
+            CompilerStage.Binder,
+            {
+                kind: "BoundQuery",
+                span: this.#ast.span,
+                ast: this.#ast,
+                with: withClause?.value,
+                body: body.value,
+                output: body.value.output,
+            },
+            { scopeSize: body.value.scope.tables.size },
+        );
+    }
+
+    bindWithClause(node: WithClauseNode): BindResult<BoundWithClause> {
+        const ctes: BoundCommonTableExpression[] = [];
+        const cteMap = new Map(this.#context.ctes);
+
+        for (const cte of node.ctes) {
+            const boundCte = this.bindCommonTableExpression(cte, cteMap);
+            if (!boundCte.ok) {
+                return boundCte;
+            }
+
+            ctes.push(boundCte.value);
+            cteMap.set(boundCte.value.name, boundCte.value);
+        }
+
+        return stageSuccess(
+            CompilerStage.Binder,
+            {
+                kind: "BoundWithClause",
+                span: node.span,
+                ast: node,
+                ctes,
+            },
+            { scopeSize: this.#scope.tables.size },
+        );
+    }
+
+    bindCommonTableExpression(
+        node: CommonTableExpressionNode,
+        visibleCtes: Map<string, BoundCommonTableExpression>,
+    ): BindResult<BoundCommonTableExpression> {
+        const name = normalizeIdentifier(node.name.name);
+        if (visibleCtes.has(name)) {
+            return this.fail(
+                DiagnosticCode.DuplicateAlias,
+                `Duplicate CTE name "${name}".`,
+                node.name.span,
+            );
+        }
+
+        const queryBinder = new Binder(node.query, this.#catalog, {
+            ctes: visibleCtes,
+            parentScope: undefined,
+        });
+        const query = queryBinder.bindQuery();
+        if (!query.ok) {
+            return query;
+        }
+
+        const table = createQueryTableSchema(name, query.value, node.columns);
+        return stageSuccess(
+            CompilerStage.Binder,
+            {
+                kind: "BoundCommonTableExpression",
+                span: node.span,
+                ast: node,
+                name,
+                query: query.value,
+                table,
+            },
+            { scopeSize: this.#scope.tables.size },
+        );
+    }
+
+    bindSelectStatement(): BindResult<BoundSelectStatement> {
+        if (this.#ast.kind !== "SelectStatement") {
+            throw new Error("bindSelectStatement requires a SelectStatement AST.");
+        }
+
         const from = this.#ast.from ? this.bindTableReference(this.#ast.from) : undefined;
         if (from && !from.ok) {
             return from;
@@ -74,6 +199,7 @@ class Binder {
         if (from?.value) {
             this.#scope.tables.set(from.value.alias, from.value);
         }
+
         const joins: BoundJoin[] = [];
         for (const join of this.#ast.joins) {
             const boundTable = this.bindTableReference(join.table);
@@ -106,14 +232,25 @@ class Binder {
         }
 
         const boundSelectItems: BoundSelectItem[] = [];
+        const output: BoundOutputColumn[] = [];
         for (const item of this.#ast.selectItems) {
             const boundItem = this.bindSelectItem(item);
             if (!boundItem.ok) {
                 return boundItem;
             }
+
             boundSelectItems.push(boundItem.value);
             if (boundItem.value.kind === "BoundSelectExpressionItem" && boundItem.value.alias) {
                 this.#selectAliases.set(boundItem.value.alias, boundItem.value.expression);
+            }
+
+            if (boundItem.value.kind === "BoundSelectWildcardItem") {
+                output.push(...boundItem.value.columns);
+            } else {
+                const column = deriveOutputColumn(boundItem.value, output.length);
+                if (column) {
+                    output.push(column);
+                }
             }
         }
 
@@ -159,6 +296,7 @@ class Binder {
 
         const scope: BoundScope = {
             tables: new Map(this.#scope.tables),
+            ctes: new Map(this.#context.ctes),
         };
 
         return stageSuccess(
@@ -176,6 +314,7 @@ class Binder {
                 orderBy,
                 limit: limit?.value,
                 scope,
+                output,
             },
             { scopeSize: scope.tables.size },
         );
@@ -189,6 +328,27 @@ class Binder {
         const path = {
             parts: node.name.parts.map((part) => normalizeIdentifier(part.name)),
         };
+
+        const cteName = path.parts.length === 1 ? path.parts[0] : undefined;
+        if (cteName) {
+            const cte = this.#context.ctes.get(cteName);
+            if (cte) {
+                return stageSuccess(
+                    CompilerStage.Binder,
+                    {
+                        kind: "BoundTableReference",
+                        span: node.span,
+                        ast: node,
+                        table: cte.table,
+                        alias: normalizeIdentifier(node.alias?.name ?? cte.name),
+                        source: "cte",
+                        subquery: cte.query,
+                    },
+                    { scopeSize: this.#scope.tables.size + 1 },
+                );
+            }
+        }
+
         const table = this.#catalog.getTable(path);
         if (!table) {
             return this.fail(
@@ -213,14 +373,17 @@ class Binder {
     }
 
     bindDerivedTableReference(node: DerivedTableReferenceNode): BindResult<BoundTableReference> {
-        const nestedBinder = new Binder(node.subquery, this.#catalog);
-        const subquery = nestedBinder.bind();
+        const queryBinder = new Binder(node.subquery, this.#catalog, {
+            ctes: this.#context.ctes,
+            parentScope: undefined,
+        });
+        const subquery = queryBinder.bindQuery();
         if (!subquery.ok) {
             return subquery;
         }
 
         const alias = normalizeIdentifier(node.alias.name);
-        const table = createDerivedTableSchema(alias, subquery.value);
+        const table = createQueryTableSchema(alias, subquery.value);
 
         return stageSuccess(
             CompilerStage.Binder,
@@ -253,6 +416,7 @@ class Binder {
                     span: node.span,
                     ast: node,
                     table: table?.value,
+                    columns: expandWildcardColumns(table?.value, this.visibleTables()),
                 } satisfies BoundSelectWildcardItem,
                 { scopeSize: this.#scope.tables.size },
             );
@@ -367,6 +531,12 @@ class Binder {
                 );
             case "InListExpression":
                 return this.bindInList(node);
+            case "InSubqueryExpression":
+                return this.bindInSubquery(node);
+            case "ExistsExpression":
+                return this.bindExists(node);
+            case "ScalarSubqueryExpression":
+                return this.bindScalarSubquery(node);
         }
     }
 
@@ -523,6 +693,82 @@ class Binder {
         );
     }
 
+    bindInSubquery(node: InSubqueryExpressionNode): BindResult<BoundInSubqueryExpression> {
+        const operand = this.bindExpression(node.operand);
+        if (!operand.ok) {
+            return operand;
+        }
+
+        const queryBinder = new Binder(node.query, this.#catalog, {
+            ctes: this.#context.ctes,
+            parentScope: this.#scope,
+        });
+        const query = queryBinder.bindQuery();
+        if (!query.ok) {
+            return query;
+        }
+
+        return stageSuccess(
+            CompilerStage.Binder,
+            {
+                kind: "BoundInSubqueryExpression",
+                span: node.span,
+                ast: node,
+                operand: operand.value,
+                query: query.value,
+                negated: node.negated,
+            },
+            { scopeSize: this.#scope.tables.size },
+        );
+    }
+
+    bindExists(node: ExistsExpressionNode): BindResult<BoundExistsExpression> {
+        const queryBinder = new Binder(node.query, this.#catalog, {
+            ctes: this.#context.ctes,
+            parentScope: this.#scope,
+        });
+        const query = queryBinder.bindQuery();
+        if (!query.ok) {
+            return query;
+        }
+
+        return stageSuccess(
+            CompilerStage.Binder,
+            {
+                kind: "BoundExistsExpression",
+                span: node.span,
+                ast: node,
+                query: query.value,
+                negated: node.negated,
+            },
+            { scopeSize: this.#scope.tables.size },
+        );
+    }
+
+    bindScalarSubquery(
+        node: ScalarSubqueryExpressionNode,
+    ): BindResult<BoundScalarSubqueryExpression> {
+        const queryBinder = new Binder(node.query, this.#catalog, {
+            ctes: this.#context.ctes,
+            parentScope: this.#scope,
+        });
+        const query = queryBinder.bindQuery();
+        if (!query.ok) {
+            return query;
+        }
+
+        return stageSuccess(
+            CompilerStage.Binder,
+            {
+                kind: "BoundScalarSubqueryExpression",
+                span: node.span,
+                ast: node,
+                query: query.value,
+            },
+            { scopeSize: this.#scope.tables.size },
+        );
+    }
+
     bindQualifiedColumn(node: QualifiedReferenceNode): BindResult<BoundColumnReference> {
         const table = this.resolveTableAlias(node.qualifier.name, node.qualifier.span);
         if (!table.ok) {
@@ -555,7 +801,7 @@ class Binder {
     }
 
     bindUnqualifiedColumn(node: IdentifierExpressionNode): BindResult<BoundColumnReference> {
-        const matches = [...this.#scope.tables.values()]
+        const matches = this.visibleTables()
             .map((table) => ({
                 table,
                 column: this.#catalog.resolveColumn(
@@ -600,7 +846,6 @@ class Binder {
         }
 
         const match = matches[0]!;
-
         return stageSuccess(
             CompilerStage.Binder,
             {
@@ -615,18 +860,32 @@ class Binder {
     }
 
     resolveTableAlias(alias: string, span: SourceSpan): BindResult<BoundTableReference> {
-        const bound = this.#scope.tables.get(normalizeIdentifier(alias));
-        if (!bound) {
-            return this.fail(
-                DiagnosticCode.UnknownTable,
-                `Unknown table or alias "${alias}".`,
-                span,
-            );
+        for (let frame: BinderScopeFrame | undefined = this.#scope; frame; frame = frame.parent) {
+            const bound = frame.tables.get(normalizeIdentifier(alias));
+            if (bound) {
+                return stageSuccess(CompilerStage.Binder, bound, {
+                    scopeSize: this.#scope.tables.size,
+                });
+            }
         }
 
-        return stageSuccess(CompilerStage.Binder, bound, {
-            scopeSize: this.#scope.tables.size,
-        });
+        return this.fail(DiagnosticCode.UnknownTable, `Unknown table or alias "${alias}".`, span);
+    }
+
+    visibleTables(): BoundTableReference[] {
+        const merged = new Map<string, BoundTableReference>();
+        const frames: BinderScopeFrame[] = [];
+        for (let frame: BinderScopeFrame | undefined = this.#scope; frame; frame = frame.parent) {
+            frames.unshift(frame);
+        }
+
+        for (const frame of frames) {
+            for (const [alias, table] of frame.tables) {
+                merged.set(alias, table);
+            }
+        }
+
+        return [...merged.values()];
     }
 
     fail(code: DiagnosticCode, message: string, span: SourceSpan): BindResult<never> {
@@ -645,25 +904,70 @@ class Binder {
     }
 }
 
-function createDerivedTableSchema(alias: string, statement: BoundSelectStatement): TableSchema {
-    const columns = new Map<string, ColumnSchema>();
+function expandWildcardColumns(
+    table: BoundTableReference | undefined,
+    visibleTables: readonly BoundTableReference[],
+): readonly BoundOutputColumn[] {
+    const tables = table ? [table] : visibleTables;
+    const columns: BoundOutputColumn[] = [];
 
-    for (const item of statement.selectItems) {
-        if (item.kind !== "BoundSelectExpressionItem") {
-            continue;
+    for (const source of tables) {
+        for (const column of source.table.columns.values()) {
+            columns.push({
+                name: column.name,
+                column,
+                sourceTable: source,
+            });
         }
-
-        const columnName = deriveSelectItemName(item);
-        if (!columnName) {
-            continue;
-        }
-
-        const normalized = normalizeIdentifier(columnName);
-        columns.set(normalized, {
-            id: `${alias}.${normalized}`,
-            name: normalized,
-        });
     }
+
+    return columns;
+}
+
+function deriveOutputColumn(
+    item: BoundSelectExpressionItem,
+    index: number,
+): BoundOutputColumn | null {
+    if (item.alias) {
+        return {
+            name: item.alias,
+            column: {
+                id: `expr:${item.alias}:${index}`,
+                name: item.alias,
+            },
+        };
+    }
+
+    if (item.expression.kind === "BoundColumnReference") {
+        return {
+            name: item.expression.column.name,
+            column: item.expression.column,
+            sourceTable: item.expression.table,
+        };
+    }
+
+    return null;
+}
+
+function createQueryTableSchema(
+    alias: string,
+    query: BoundQuery,
+    explicitColumns: CommonTableExpressionNode["columns"] = [],
+): TableSchema {
+    const columns = new Map<string, ColumnSchema>();
+    const names =
+        explicitColumns.length > 0
+            ? explicitColumns.map((column) => normalizeIdentifier(column.name))
+            : query.output.map((column) => column.name);
+
+    names.forEach((name, index) => {
+        const source = query.output[index];
+        columns.set(name, {
+            id: source?.column.id ?? `${alias}.${name}`,
+            name,
+            type: source?.column.type,
+        });
+    });
 
     return {
         id: `derived:${alias}`,
@@ -673,21 +977,4 @@ function createDerivedTableSchema(alias: string, statement: BoundSelectStatement
         },
         columns,
     };
-}
-
-function deriveSelectItemName(item: BoundSelectExpressionItem): string | null {
-    if (item.alias) {
-        return item.alias;
-    }
-
-    const expression = item.ast.expression;
-    if (expression.kind === "IdentifierExpression") {
-        return expression.identifier.name;
-    }
-
-    if (expression.kind === "QualifiedReference") {
-        return expression.column.name;
-    }
-
-    return null;
 }

@@ -1,7 +1,9 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 
+import { AliasCatalog, createCatalogAlias } from "../src/catalog";
 import { compile } from "../src/compiler";
 import { CompilerStage, DiagnosticCode, formatDiagnostic } from "../src/diagnostics";
+import { tenantScopingPolicy } from "../src/policies";
 import { createSourceFile } from "../src/source";
 import { createTestCatalog } from "../src/testing";
 
@@ -19,13 +21,16 @@ describe("compile", () => {
 
         expect(result.ok).toBe(true);
         expect(result.terminalStage).toBe(CompilerStage.Emitter);
+        expect(result.stages.rewrite?.stage).toBe(CompilerStage.Rewriter);
+        expect(result.stages.analyze?.stage).toBe(CompilerStage.Analyzer);
+        expect(result.stages.enforce?.stage).toBe(CompilerStage.Enforcer);
         expect(result.emitted?.sql).toBe(
             "SELECT `users`.`id`, `users`.`name` FROM `users` WHERE `users`.`tenant_id` = ? ORDER BY `users`.`created_at` DESC LIMIT 10",
         );
     });
 
     test("short-circuits on parse failure", () => {
-        const result = compile("WITH cte AS (SELECT id FROM users) SELECT id FROM cte", {
+        const result = compile("UPDATE users SET name = 'x'", {
             catalog: createTestCatalog(),
             dialect: "mysql",
             strict: true,
@@ -35,6 +40,23 @@ describe("compile", () => {
         expect(result.terminalStage).toBe(CompilerStage.Parser);
         expect(result.stages.bind).toBeUndefined();
         expect(result.diagnostics[0]?.code).toBe(DiagnosticCode.UnsupportedStatement);
+    });
+
+    test("supports CTEs and subqueries in the full pipeline", () => {
+        const result = compile(
+            "WITH recent_orders AS (SELECT user_id FROM orders WHERE status = 'paid') SELECT id FROM users WHERE id IN (SELECT user_id FROM recent_orders)",
+            {
+                catalog: createTestCatalog(),
+                dialect: "mysql",
+                strict: true,
+            },
+        );
+
+        expect(result.ok).toBe(true);
+        expect(result.emitted?.sql).toContain("WITH `recent_orders` AS");
+        expect(result.emitted?.sql).toContain(
+            "IN (SELECT `recent_orders`.`user_id` FROM `recent_orders`)",
+        );
     });
 
     test("renders descriptive diagnostics with source locations", () => {
@@ -67,7 +89,7 @@ describe("compile", () => {
         expect(result.diagnostics[0]?.code).toBe(DiagnosticCode.UnexpectedCharacter);
     });
 
-    test("short-circuits on validator failure before emit", () => {
+    test("short-circuits on enforcement failure before emit", () => {
         const result = compile("SELECT SUM(total) FROM orders LIMIT 1000", {
             catalog: createTestCatalog(),
             dialect: "mysql",
@@ -77,7 +99,7 @@ describe("compile", () => {
         });
 
         expect(result.ok).toBe(false);
-        expect(result.terminalStage).toBe(CompilerStage.Validator);
+        expect(result.terminalStage).toBe(CompilerStage.Enforcer);
         expect(result.stages.emit).toBeUndefined();
         expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toContain(
             DiagnosticCode.DisallowedFunction,
@@ -87,7 +109,7 @@ describe("compile", () => {
         );
     });
 
-    test("preserves bound artifacts on validator failure", () => {
+    test("preserves bound artifacts on enforcement failure", () => {
         const result = compile("SELECT SUM(total) FROM orders", {
             catalog: createTestCatalog(),
             dialect: "mysql",
@@ -96,9 +118,71 @@ describe("compile", () => {
         });
 
         expect(result.ok).toBe(false);
-        expect(result.ast?.kind).toBe("SelectStatement");
-        expect(result.bound?.kind).toBe("BoundSelectStatement");
+        expect(result.ast?.kind).toBe("Query");
+        expect(result.bound?.kind).toBe("BoundQuery");
         expect(result.emitted).toBeUndefined();
+    });
+
+    test("supports virtualized table aliases through the catalog", () => {
+        const catalog = new AliasCatalog(createTestCatalog(), [
+            createCatalogAlias({
+                from: ["projects"],
+                to: ["internal_projects"],
+            }),
+        ]);
+
+        const result = compile("SELECT id, name FROM projects WHERE tenant_id = ?", {
+            catalog,
+            dialect: "mysql",
+            strict: true,
+        });
+
+        expect(result.ok).toBe(true);
+        expect(result.emitted?.sql).toBe(
+            "SELECT `internal_projects`.`id`, `internal_projects`.`name` FROM `internal_projects` WHERE `internal_projects`.`tenant_id` = ?",
+        );
+    });
+
+    test("rewrites tenant-scoped queries automatically", () => {
+        const result = compile("SELECT metric FROM timeseries", {
+            catalog: createTestCatalog(),
+            dialect: "mysql",
+            policies: [
+                tenantScopingPolicy({
+                    tables: ["timeseries"],
+                    scopeColumn: "tenant_id",
+                    contextKey: "tenantId",
+                }),
+            ],
+            policyContext: {
+                tenantId: "tenant-123",
+            },
+            strict: true,
+        });
+
+        expect(result.ok).toBe(true);
+        expect(result.emitted?.sql).toBe(
+            "SELECT `timeseries`.`metric` FROM `timeseries` WHERE `timeseries`.`tenant_id` = 'tenant-123'",
+        );
+    });
+
+    test("fails rewrite when tenant scoping policy context is missing", () => {
+        const result = compile("SELECT metric FROM timeseries", {
+            catalog: createTestCatalog(),
+            dialect: "mysql",
+            policies: [
+                tenantScopingPolicy({
+                    tables: ["timeseries"],
+                    scopeColumn: "tenant_id",
+                    contextKey: "tenantId",
+                }),
+            ],
+            strict: true,
+        });
+
+        expect(result.ok).toBe(false);
+        expect(result.terminalStage).toBe(CompilerStage.Rewriter);
+        expect(result.diagnostics[0]?.code).toBe(DiagnosticCode.RewriteInvariantViolation);
     });
 
     test("supports projection-only and current temporal selects", () => {
@@ -175,14 +259,12 @@ LIMIT 100 OFFSET 20`;
         });
 
         expect(result.ok).toBe(true);
+        expect(result.emitted?.sql).toContain("ORDER BY `sum`(`o`.`total_cents`) / 100.0 ASC");
         expect(result.emitted?.sql).toContain(
-            "ORDER BY `sum`(`o`.`total_cents`) / 100.0 ASC",
+            "WHERE `orders`.`status` IN ('paid', 'shipped') AND `orders`.`created_at` >= '2024-01-01'",
         );
         expect(result.emitted?.sql).toContain(
-            "WHERE `status` IN ('paid', 'shipped') AND `created_at` >= '2024-01-01'",
-        );
-        expect(result.emitted?.sql).toContain(
-            "INNER JOIN (SELECT `user_id`, `id`, `total_cents`, `created_at` FROM `orders` WHERE `status` IN ('paid', 'shipped') AND `created_at` >= '2024-01-01') AS `o`",
+            "INNER JOIN (SELECT `orders`.`user_id`, `orders`.`id`, `orders`.`total_cents`, `orders`.`created_at` FROM `orders`",
         );
     });
 

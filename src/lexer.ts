@@ -33,6 +33,7 @@ const KEYWORDS = new Set([
     "SET",
     "UNION",
     "IN",
+    "EXISTS",
     "CURRENT_TIMESTAMP",
     "CURRENT_DATE",
     "CURRENT_TIME",

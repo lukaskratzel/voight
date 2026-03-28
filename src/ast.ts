@@ -17,6 +17,24 @@ export interface QualifiedNameNode extends AstNode {
     readonly parts: readonly IdentifierNode[];
 }
 
+export interface QueryAst extends AstNode {
+    readonly kind: "Query";
+    readonly with?: WithClauseNode;
+    readonly body: SelectStatementAst;
+}
+
+export interface WithClauseNode extends AstNode {
+    readonly kind: "WithClause";
+    readonly ctes: readonly CommonTableExpressionNode[];
+}
+
+export interface CommonTableExpressionNode extends AstNode {
+    readonly kind: "CommonTableExpression";
+    readonly name: IdentifierNode;
+    readonly columns: readonly IdentifierNode[];
+    readonly query: QueryAst;
+}
+
 export interface SelectStatementAst extends AstNode {
     readonly kind: "SelectStatement";
     readonly selectItems: readonly SelectItemNode[];
@@ -52,7 +70,7 @@ export interface NamedTableReferenceNode extends AstNode {
 
 export interface DerivedTableReferenceNode extends AstNode {
     readonly kind: "DerivedTableReference";
-    readonly subquery: SelectStatementAst;
+    readonly subquery: QueryAst;
     readonly alias: IdentifierNode;
 }
 
@@ -87,7 +105,10 @@ export type ExpressionNode =
     | WildcardExpressionNode
     | IsNullExpressionNode
     | CurrentKeywordExpressionNode
-    | InListExpressionNode;
+    | InListExpressionNode
+    | InSubqueryExpressionNode
+    | ExistsExpressionNode
+    | ScalarSubqueryExpressionNode;
 
 export interface IdentifierExpressionNode extends AstNode {
     readonly kind: "IdentifierExpression";
@@ -160,10 +181,55 @@ export interface InListExpressionNode extends AstNode {
     readonly negated: boolean;
 }
 
+export interface InSubqueryExpressionNode extends AstNode {
+    readonly kind: "InSubqueryExpression";
+    readonly operand: ExpressionNode;
+    readonly query: QueryAst;
+    readonly negated: boolean;
+}
+
+export interface ExistsExpressionNode extends AstNode {
+    readonly kind: "ExistsExpression";
+    readonly query: QueryAst;
+    readonly negated: boolean;
+}
+
+export interface ScalarSubqueryExpressionNode extends AstNode {
+    readonly kind: "ScalarSubqueryExpression";
+    readonly query: QueryAst;
+}
+
 export interface FunctionCallNode extends AstNode {
     readonly kind: "FunctionCall";
     readonly callee: IdentifierNode;
     readonly arguments: readonly ExpressionNode[];
+}
+
+export interface GroupingExpressionNode extends AstNode {
+    readonly kind: "GroupingExpression";
+    readonly expression: ExpressionNode;
+}
+
+export interface BoundQuery extends AstNode {
+    readonly kind: "BoundQuery";
+    readonly ast: QueryAst;
+    readonly with?: BoundWithClause;
+    readonly body: BoundSelectStatement;
+    readonly output: readonly BoundOutputColumn[];
+}
+
+export interface BoundWithClause extends AstNode {
+    readonly kind: "BoundWithClause";
+    readonly ast: WithClauseNode;
+    readonly ctes: readonly BoundCommonTableExpression[];
+}
+
+export interface BoundCommonTableExpression extends AstNode {
+    readonly kind: "BoundCommonTableExpression";
+    readonly ast: CommonTableExpressionNode;
+    readonly name: string;
+    readonly query: BoundQuery;
+    readonly table: TableSchema;
 }
 
 export interface BoundSelectStatement extends AstNode {
@@ -178,6 +244,13 @@ export interface BoundSelectStatement extends AstNode {
     readonly orderBy: readonly BoundOrderByItem[];
     readonly limit?: BoundLimitClause;
     readonly scope: BoundScope;
+    readonly output: readonly BoundOutputColumn[];
+}
+
+export interface BoundOutputColumn {
+    readonly name: string;
+    readonly column: ColumnSchema;
+    readonly sourceTable?: BoundTableReference;
 }
 
 export type BoundSelectItem = BoundSelectExpressionItem | BoundSelectWildcardItem;
@@ -193,6 +266,7 @@ export interface BoundSelectWildcardItem extends AstNode {
     readonly kind: "BoundSelectWildcardItem";
     readonly ast: SelectWildcardItemNode;
     readonly table?: BoundTableReference;
+    readonly columns: readonly BoundOutputColumn[];
 }
 
 export interface BoundTableReference extends AstNode {
@@ -200,8 +274,8 @@ export interface BoundTableReference extends AstNode {
     readonly ast: TableReferenceNode;
     readonly table: TableSchema;
     readonly alias: string;
-    readonly source: "catalog" | "derived";
-    readonly subquery?: BoundSelectStatement;
+    readonly source: "catalog" | "derived" | "cte";
+    readonly subquery?: BoundQuery;
 }
 
 export interface BoundJoin extends AstNode {
@@ -228,6 +302,7 @@ export interface BoundLimitClause extends AstNode {
 
 export interface BoundScope {
     readonly tables: ReadonlyMap<string, BoundTableReference>;
+    readonly ctes: ReadonlyMap<string, BoundCommonTableExpression>;
 }
 
 export type BoundExpression =
@@ -241,7 +316,10 @@ export type BoundExpression =
     | BoundWildcardExpression
     | BoundIsNullExpression
     | BoundCurrentKeywordExpression
-    | BoundInListExpression;
+    | BoundInListExpression
+    | BoundInSubqueryExpression
+    | BoundExistsExpression
+    | BoundScalarSubqueryExpression;
 
 export interface BoundLiteral extends AstNode {
     readonly kind: "BoundLiteral";
@@ -291,11 +369,6 @@ export interface BoundGroupingExpression extends AstNode {
     readonly expression: BoundExpression;
 }
 
-export interface GroupingExpressionNode extends AstNode {
-    readonly kind: "GroupingExpression";
-    readonly expression: ExpressionNode;
-}
-
 export interface BoundWildcardExpression extends AstNode {
     readonly kind: "BoundWildcardExpression";
     readonly ast: WildcardExpressionNode;
@@ -321,4 +394,25 @@ export interface BoundInListExpression extends AstNode {
     readonly operand: BoundExpression;
     readonly values: readonly BoundExpression[];
     readonly negated: boolean;
+}
+
+export interface BoundInSubqueryExpression extends AstNode {
+    readonly kind: "BoundInSubqueryExpression";
+    readonly ast: InSubqueryExpressionNode;
+    readonly operand: BoundExpression;
+    readonly query: BoundQuery;
+    readonly negated: boolean;
+}
+
+export interface BoundExistsExpression extends AstNode {
+    readonly kind: "BoundExistsExpression";
+    readonly ast: ExistsExpressionNode;
+    readonly query: BoundQuery;
+    readonly negated: boolean;
+}
+
+export interface BoundScalarSubqueryExpression extends AstNode {
+    readonly kind: "BoundScalarSubqueryExpression";
+    readonly ast: ScalarSubqueryExpressionNode;
+    readonly query: BoundQuery;
 }

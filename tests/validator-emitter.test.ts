@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 
 import { bind } from "../src/binder";
 import { DiagnosticCode } from "../src/diagnostics";
@@ -55,9 +55,7 @@ describe("validate", () => {
     });
 
     test("allows approved functions and nested expressions", () => {
-        const bound = bindStatement(
-            "SELECT SUM(total) FROM orders WHERE NOT (tenant_id = ?)",
-        );
+        const bound = bindStatement("SELECT SUM(total) FROM orders WHERE NOT (tenant_id = ?)");
         const result = validate(bound, {
             allowedFunctions: new Set(["sum"]),
         });
@@ -93,9 +91,7 @@ describe("emit", () => {
             return;
         }
 
-        expect(result.value.sql).toBe(
-            "SELECT * FROM `users` LIMIT 5 OFFSET 2",
-        );
+        expect(result.value.sql).toBe("SELECT * FROM `users` LIMIT 5 OFFSET 2");
     });
 
     test("emits quoted identifiers for quoted input names", () => {
