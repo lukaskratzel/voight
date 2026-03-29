@@ -314,7 +314,7 @@ function emitLiteral(
     }
 
     if (typeof value === "string") {
-        return `'${value.replace(/'/g, "''")}'`;
+        return `'${value.replace(/\\/g, "\\\\").replace(/'/g, "''")}'`;
     }
 
     if (typeof value === "boolean") {

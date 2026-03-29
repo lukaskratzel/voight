@@ -3,6 +3,7 @@ import type {
     BoundExpression,
     BoundQuery,
     BoundSelectStatement,
+    ExpressionNode,
     IdentifierNode,
     LiteralNode,
     QueryAst,
@@ -80,6 +81,41 @@ class TenantScopingPolicy implements CompilerPolicy {
 
         const diagnostics: Diagnostic[] = [];
 
+        const visitBoundExpression = (expression: BoundExpression): void => {
+            switch (expression.kind) {
+                case "BoundInSubqueryExpression":
+                    visitBoundExpression(expression.operand);
+                    visitQuery(expression.query);
+                    return;
+                case "BoundExistsExpression":
+                case "BoundScalarSubqueryExpression":
+                    visitQuery(expression.query);
+                    return;
+                case "BoundBinaryExpression":
+                    visitBoundExpression(expression.left);
+                    visitBoundExpression(expression.right);
+                    return;
+                case "BoundUnaryExpression":
+                    visitBoundExpression(expression.operand);
+                    return;
+                case "BoundGroupingExpression":
+                    visitBoundExpression(expression.expression);
+                    return;
+                case "BoundIsNullExpression":
+                    visitBoundExpression(expression.operand);
+                    return;
+                case "BoundInListExpression":
+                    visitBoundExpression(expression.operand);
+                    expression.values.forEach(visitBoundExpression);
+                    return;
+                case "BoundFunctionCall":
+                    expression.arguments.forEach(visitBoundExpression);
+                    return;
+                default:
+                    return;
+            }
+        };
+
         const visitQuery = (query: BoundQuery): void => {
             query.with?.ctes.forEach((cte) => visitQuery(cte.query));
             this.#enforceSelect(query.body, diagnostics, value);
@@ -87,10 +123,21 @@ class TenantScopingPolicy implements CompilerPolicy {
                 if (join.table.source === "derived" && join.table.subquery) {
                     visitQuery(join.table.subquery);
                 }
+                visitBoundExpression(join.on);
             });
             if (query.body.from?.source === "derived" && query.body.from.subquery) {
                 visitQuery(query.body.from.subquery);
             }
+            const body = query.body;
+            body.selectItems.forEach((item) => {
+                if (item.kind === "BoundSelectExpressionItem") {
+                    visitBoundExpression(item.expression);
+                }
+            });
+            body.where && visitBoundExpression(body.where);
+            body.groupBy.forEach(visitBoundExpression);
+            body.having && visitBoundExpression(body.having);
+            body.orderBy.forEach((item) => visitBoundExpression(item.expression));
         };
 
         visitQuery(bound);
@@ -206,13 +253,114 @@ function rewriteSelectTables(
     const joins = select.joins.map((join) => ({
         ...join,
         table: rewriteTable(join.table, rewriteSelect),
+        on: rewriteExpressionSubqueries(join.on, rewriteSelect),
     }));
+    const selectItems = select.selectItems.map((item) =>
+        item.kind === "SelectExpressionItem"
+            ? { ...item, expression: rewriteExpressionSubqueries(item.expression, rewriteSelect) }
+            : item,
+    );
+    const where = select.where
+        ? rewriteExpressionSubqueries(select.where, rewriteSelect)
+        : undefined;
+    const groupBy = select.groupBy.map((expr) =>
+        rewriteExpressionSubqueries(expr, rewriteSelect),
+    );
+    const having = select.having
+        ? rewriteExpressionSubqueries(select.having, rewriteSelect)
+        : undefined;
+    const orderBy = select.orderBy.map((item) => ({
+        ...item,
+        expression: rewriteExpressionSubqueries(item.expression, rewriteSelect),
+    }));
+    const limit = select.limit
+        ? {
+              ...select.limit,
+              count: rewriteExpressionSubqueries(select.limit.count, rewriteSelect),
+              offset: select.limit.offset
+                  ? rewriteExpressionSubqueries(select.limit.offset, rewriteSelect)
+                  : undefined,
+          }
+        : undefined;
 
     return {
         ...select,
+        selectItems,
         from,
         joins,
+        where,
+        groupBy,
+        having,
+        orderBy,
+        limit,
     };
+}
+
+function rewriteExpressionSubqueries(
+    expression: ExpressionNode,
+    rewriteSelect: (select: SelectStatementAst) => SelectStatementAst,
+): ExpressionNode {
+    switch (expression.kind) {
+        case "InSubqueryExpression":
+            return {
+                ...expression,
+                operand: rewriteExpressionSubqueries(expression.operand, rewriteSelect),
+                query: rewriteQuery(expression.query, rewriteSelect),
+            };
+        case "ExistsExpression":
+            return {
+                ...expression,
+                query: rewriteQuery(expression.query, rewriteSelect),
+            };
+        case "ScalarSubqueryExpression":
+            return {
+                ...expression,
+                query: rewriteQuery(expression.query, rewriteSelect),
+            };
+        case "BinaryExpression":
+            return {
+                ...expression,
+                left: rewriteExpressionSubqueries(expression.left, rewriteSelect),
+                right: rewriteExpressionSubqueries(expression.right, rewriteSelect),
+            };
+        case "UnaryExpression":
+            return {
+                ...expression,
+                operand: rewriteExpressionSubqueries(expression.operand, rewriteSelect),
+            };
+        case "GroupingExpression":
+            return {
+                ...expression,
+                expression: rewriteExpressionSubqueries(expression.expression, rewriteSelect),
+            };
+        case "IsNullExpression":
+            return {
+                ...expression,
+                operand: rewriteExpressionSubqueries(expression.operand, rewriteSelect),
+            };
+        case "InListExpression":
+            return {
+                ...expression,
+                operand: rewriteExpressionSubqueries(expression.operand, rewriteSelect),
+                values: expression.values.map((v) =>
+                    rewriteExpressionSubqueries(v, rewriteSelect),
+                ),
+            };
+        case "FunctionCall":
+            return {
+                ...expression,
+                arguments: expression.arguments.map((a) =>
+                    rewriteExpressionSubqueries(a, rewriteSelect),
+                ),
+            };
+        case "Literal":
+        case "Parameter":
+        case "IdentifierExpression":
+        case "QualifiedReference":
+        case "WildcardExpression":
+        case "CurrentKeywordExpression":
+            return expression;
+    }
 }
 
 function rewriteTable(
