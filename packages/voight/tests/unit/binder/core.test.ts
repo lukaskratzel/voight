@@ -353,4 +353,62 @@ describe("bind", () => {
 
         expect(result.diagnostics[0]?.code).toBe(DiagnosticCode.UnsupportedConstruct);
     });
+
+    test("binds window functions and window specifications", () => {
+        const ast = parseQuery(
+            "SELECT SUM(total) OVER (PARTITION BY user_id ORDER BY created_at DESC) FROM orders",
+        );
+
+        const result = bind(ast, createTestCatalog());
+        expect(result.ok).toBe(true);
+        if (!result.ok) {
+            return;
+        }
+
+        const selectItem = result.value.body.selectItems[0];
+        expect(selectItem?.kind).toBe("BoundSelectExpressionItem");
+        if (selectItem?.kind === "BoundSelectExpressionItem") {
+            expect(selectItem.expression.kind).toBe("BoundFunctionCall");
+            if (selectItem.expression.kind === "BoundFunctionCall") {
+                expect(selectItem.expression.over?.partitionBy).toHaveLength(1);
+                expect(selectItem.expression.over?.orderBy).toHaveLength(1);
+            }
+        }
+    });
+
+    test("rejects non-selectable columns inside window PARTITION BY", () => {
+        const ast = parseQuery("SELECT COUNT(*) OVER (PARTITION BY tenant_id) FROM users");
+        const catalog = new InMemoryCatalog([
+            createTableSchema({
+                path: ["users"],
+                columns: ["id", { name: "tenant_id", selectable: false }],
+            }),
+        ]);
+
+        const result = bind(ast, catalog);
+        expect(result.ok).toBe(false);
+        if (result.ok) {
+            return;
+        }
+
+        expect(result.diagnostics[0]?.code).toBe(DiagnosticCode.NonSelectableColumn);
+    });
+
+    test("rejects non-selectable columns inside window ORDER BY", () => {
+        const ast = parseQuery("SELECT COUNT(*) OVER (ORDER BY tenant_id DESC) FROM users");
+        const catalog = new InMemoryCatalog([
+            createTableSchema({
+                path: ["users"],
+                columns: ["id", { name: "tenant_id", selectable: false }],
+            }),
+        ]);
+
+        const result = bind(ast, catalog);
+        expect(result.ok).toBe(false);
+        if (result.ok) {
+            return;
+        }
+
+        expect(result.diagnostics[0]?.code).toBe(DiagnosticCode.NonSelectableColumn);
+    });
 });

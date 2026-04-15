@@ -110,6 +110,20 @@ export function findNonSelectableProjectionReference(
                     return match;
                 }
             }
+            if (expression.over) {
+                for (const value of expression.over.partitionBy) {
+                    const match = findNonSelectableProjectionReference(value);
+                    if (match) {
+                        return match;
+                    }
+                }
+                for (const item of expression.over.orderBy) {
+                    const match = findNonSelectableProjectionReference(item.expression);
+                    if (match) {
+                        return match;
+                    }
+                }
+            }
             return undefined;
         case "BoundCastExpression":
             return findNonSelectableProjectionReference(expression.expression);

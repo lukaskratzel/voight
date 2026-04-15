@@ -450,6 +450,28 @@ class TenantScopingPolicy implements CompilerPolicy {
                     arguments: expression.arguments.map((arg) =>
                         this.#rewriteExpression(arg, contextValues, visibleCtes, catalog),
                     ),
+                    over: expression.over
+                        ? {
+                              ...expression.over,
+                              partitionBy: expression.over.partitionBy.map((value) =>
+                                  this.#rewriteExpression(
+                                      value,
+                                      contextValues,
+                                      visibleCtes,
+                                      catalog,
+                                  ),
+                              ),
+                              orderBy: expression.over.orderBy.map((item) => ({
+                                  ...item,
+                                  expression: this.#rewriteExpression(
+                                      item.expression,
+                                      contextValues,
+                                      visibleCtes,
+                                      catalog,
+                                  ),
+                              })),
+                          }
+                        : undefined,
                 };
             case "CastExpression":
                 return {

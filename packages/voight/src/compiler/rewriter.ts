@@ -376,6 +376,9 @@ function validateExpression(node: unknown, path: string, errors: string[]): void
                 errors.push(`${path}.distinct must be a boolean.`);
             }
             validateArray(node.arguments, `${path}.arguments`, errors, validateExpression);
+            if (typeof node.over !== "undefined") {
+                validateWindowSpecification(node.over, `${path}.over`, errors);
+            }
             return;
         case "CastExpression":
             validateExpression(node.expression, `${path}.expression`, errors);
@@ -455,6 +458,21 @@ function validateCaseWhenClause(node: unknown, path: string, errors: string[]): 
     validateSpan(node.span, `${path}.span`, errors);
     validateExpression(node.when, `${path}.when`, errors);
     validateExpression(node.then, `${path}.then`, errors);
+}
+
+function validateWindowSpecification(node: unknown, path: string, errors: string[]): void {
+    if (!isRecord(node)) {
+        errors.push(`${path} must be an object.`);
+        return;
+    }
+
+    if (node.kind !== "WindowSpecification") {
+        errors.push(`${path}.kind must be "WindowSpecification".`);
+    }
+
+    validateSpan(node.span, `${path}.span`, errors);
+    validateArray(node.partitionBy, `${path}.partitionBy`, errors, validateExpression);
+    validateArray(node.orderBy, `${path}.orderBy`, errors, validateOrderByItem);
 }
 
 function validateCastType(node: unknown, path: string, errors: string[]): void {

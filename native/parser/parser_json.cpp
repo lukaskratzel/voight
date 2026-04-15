@@ -226,6 +226,30 @@ class NativeAstBuilder {
     return json;
   }
 
+  Json build_window_specification(VoightParser::WindowSpecificationContext* ctx) {
+    Json json = node("WindowSpecification", ctx);
+
+    Json partition_by = Json::array();
+    if (ctx->partitionByClause() != nullptr) {
+      partition_by.reserveArray(ctx->partitionByClause()->expression().size());
+      for (auto* expression : ctx->partitionByClause()->expression()) {
+        partition_by.pushBack(build_expression(expression));
+      }
+    }
+    json["partitionBy"] = std::move(partition_by);
+
+    Json order_by = Json::array();
+    if (ctx->windowOrderByClause() != nullptr) {
+      order_by.reserveArray(ctx->windowOrderByClause()->orderByItem().size());
+      for (auto* item : ctx->windowOrderByClause()->orderByItem()) {
+        order_by.pushBack(build_order_by_item(item));
+      }
+    }
+    json["orderBy"] = std::move(order_by);
+
+    return json;
+  }
+
   Json build_limit_clause(VoightParser::LimitClauseContext* ctx) {
     Json json = node("LimitClause", ctx);
     auto expressions = ctx->expression();
@@ -438,6 +462,9 @@ class NativeAstBuilder {
       json["distinct"] = ctx->DISTINCT() != nullptr;
       json["arguments"] =
           ctx->argumentList() != nullptr ? build_argument_list(ctx->argumentList()) : Json::array();
+      if (ctx->windowSpecification() != nullptr) {
+        json["over"] = build_window_specification(ctx->windowSpecification());
+      }
       return json;
     }
 

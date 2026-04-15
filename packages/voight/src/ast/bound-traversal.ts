@@ -92,6 +92,14 @@ function visitBoundExpression(expression: BoundExpression, visitor: BoundTreeVis
             return;
         case "BoundFunctionCall":
             expression.arguments.forEach((arg) => visitBoundExpression(arg, visitor));
+            if (expression.over) {
+                expression.over.partitionBy.forEach((value) =>
+                    visitBoundExpression(value, visitor),
+                );
+                expression.over.orderBy.forEach((item) =>
+                    visitBoundExpression(item.expression, visitor),
+                );
+            }
             return;
         case "BoundCastExpression":
             visitBoundExpression(expression.expression, visitor);

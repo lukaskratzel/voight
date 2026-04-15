@@ -78,6 +78,18 @@ orderByItem
     : expression (ASC | DESC)?
     ;
 
+windowSpecification
+    : OVER LPAREN partitionByClause? windowOrderByClause? RPAREN
+    ;
+
+partitionByClause
+    : PARTITION BY expression (COMMA expression)*
+    ;
+
+windowOrderByClause
+    : ORDER BY orderByItem (COMMA orderByItem)*
+    ;
+
 limitClause
     : LIMIT expression ((COMMA expression) | (OFFSET expression))?
     ;
@@ -146,7 +158,7 @@ primaryExpression
     | CURRENT_DATE
     | CURRENT_TIME
     | ASTERISK
-    | identifier LPAREN (DISTINCT argumentList | argumentList)? RPAREN
+    | identifier LPAREN (DISTINCT argumentList | argumentList)? RPAREN windowSpecification?
     | identifier DOT ASTERISK
     | identifier DOT identifier
     | identifier

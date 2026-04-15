@@ -105,4 +105,30 @@ describe("FIXED: expression subqueries are now tenant-scoped", () => {
         expect(result.ok).toBe(true);
         expect(result.emitted!.sql).toContain("`timeseries`.`tenant_id` = 'tenant-123'");
     });
+
+    test("scalar subqueries inside window PARTITION BY are tenant-scoped", () => {
+        const result = compileTenantScoped(
+            "SELECT id, COUNT(id) OVER (PARTITION BY (SELECT metric FROM timeseries LIMIT 1)) FROM users",
+        );
+        expect(result.ok).toBe(true);
+        if (!result.ok) {
+            return;
+        }
+
+        expect(result.emitted!.sql).toContain("PARTITION BY (SELECT `timeseries`.`metric`");
+        expect(result.emitted!.sql).toContain("`timeseries`.`tenant_id` = 'tenant-123'");
+    });
+
+    test("scalar subqueries inside window ORDER BY are tenant-scoped", () => {
+        const result = compileTenantScoped(
+            "SELECT id, COUNT(id) OVER (ORDER BY (SELECT COUNT(timeseries.id) FROM timeseries)) FROM users",
+        );
+        expect(result.ok).toBe(true);
+        if (!result.ok) {
+            return;
+        }
+
+        expect(result.emitted!.sql).toContain("ORDER BY (SELECT count(`timeseries`.`id`)");
+        expect(result.emitted!.sql).toContain("`timeseries`.`tenant_id` = 'tenant-123'");
+    });
 });

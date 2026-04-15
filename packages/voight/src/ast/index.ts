@@ -28,6 +28,7 @@ import type {
     TableReferenceNode,
     UnaryExpressionNode,
     WildcardExpressionNode,
+    WindowSpecificationNode,
     WithClauseNode,
     OrderByItemNode,
 } from "./query-ast-schema";
@@ -69,6 +70,7 @@ export type {
     TableReferenceNode,
     UnaryExpressionNode,
     WildcardExpressionNode,
+    WindowSpecificationNode,
     WithClauseNode,
     OrderByItemNode,
 } from "./query-ast-schema";
@@ -227,6 +229,14 @@ export interface BoundFunctionCall extends AstNode {
     readonly callee: string;
     readonly distinct: boolean;
     readonly arguments: readonly BoundExpression[];
+    readonly over?: BoundWindowSpecification;
+}
+
+export interface BoundWindowSpecification extends AstNode {
+    readonly kind: "BoundWindowSpecification";
+    readonly ast: WindowSpecificationNode;
+    readonly partitionBy: readonly BoundExpression[];
+    readonly orderBy: readonly BoundOrderByItem[];
 }
 
 export interface BoundCastExpression extends AstNode {
