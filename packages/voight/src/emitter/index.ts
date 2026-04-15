@@ -109,7 +109,9 @@ function emitBoundSelect(statement: BoundSelectStatement, parameterIndices: numb
             : "";
     const limit = statement.limit ? emitBoundLimit(statement.limit, parameterIndices) : "";
 
-    return `SELECT ${select}${from}${joins ? ` ${joins}` : ""}${where}${groupBy}${having}${orderBy}${limit}`;
+    const distinct = statement.distinct ? "DISTINCT " : "";
+
+    return `SELECT ${distinct}${select}${from}${joins ? ` ${joins}` : ""}${where}${groupBy}${having}${orderBy}${limit}`;
 }
 
 function emitOutputColumn(column: BoundQuery["output"][number]): string {
@@ -167,7 +169,7 @@ function emitBoundExpression(expression: BoundExpression, parameterIndices: numb
                 emitBoundBinaryOperand(expression.right, expression.operator, parameterIndices),
             );
         case "BoundFunctionCall":
-            return `${expression.callee}(${expression.arguments.map((arg) => emitBoundExpression(arg, parameterIndices)).join(", ")})`;
+            return `${expression.callee}(${expression.distinct ? "DISTINCT " : ""}${expression.arguments.map((arg) => emitBoundExpression(arg, parameterIndices)).join(", ")})`;
         case "BoundCastExpression":
             return `CAST(${emitBoundExpression(expression.expression, parameterIndices)} AS ${emitCastType(expression.targetType)})`;
         case "BoundCaseExpression":

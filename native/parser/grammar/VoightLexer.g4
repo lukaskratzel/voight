@@ -1,6 +1,7 @@
 lexer grammar VoightLexer;
 
 SELECT: S E L E C T;
+DISTINCT: D I S T I N C T;
 FROM: F R O M;
 WHERE: W H E R E;
 GROUP: G R O U P;

@@ -245,6 +245,14 @@ function bindFunction(
         (arg): arg is BoundWildcardExpression => arg.kind === "BoundWildcardExpression",
     );
     if (wildcardArgument) {
+        if (node.distinct) {
+            return context.fail(
+                DiagnosticCode.UnsupportedConstruct,
+                "DISTINCT wildcard arguments are not supported in functions.",
+                wildcardArgument.span,
+            );
+        }
+
         if (callee !== "count") {
             return context.fail(
                 DiagnosticCode.UnsupportedConstruct,
@@ -277,6 +285,7 @@ function bindFunction(
             span: node.span,
             ast: node,
             callee,
+            distinct: node.distinct,
             arguments: args,
         },
         { scopeSize: context.scopeSize() },

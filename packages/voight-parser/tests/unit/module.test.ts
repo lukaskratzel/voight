@@ -31,6 +31,7 @@ describe("@voight/voight-parser", () => {
             body: {
                 kind: "SelectStatement",
                 span: { start: 0, end: 75 },
+                distinct: false,
                 selectItems: [
                     {
                         kind: "SelectExpressionItem",
@@ -280,7 +281,7 @@ describe("@voight/voight-parser", () => {
         expect(result.error).toBe(true);
         expect(result.type).toBe("SyntaxError");
         expect(result.message).toContain("mismatched input");
-        expect(result.span).toEqual({ start: 11, end: 11 });
+        expect(result.span).toEqual({ start: 7, end: 11 });
     });
 
     it("fails closed when the wasm bundle is missing", async () => {

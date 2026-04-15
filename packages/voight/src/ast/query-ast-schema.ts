@@ -32,6 +32,7 @@ export interface CommonTableExpressionNode extends AstNode<"CommonTableExpressio
 }
 
 export interface SelectStatementAst extends AstNode<"SelectStatement"> {
+    readonly distinct: boolean;
     readonly selectItems: SelectItemNode[];
     readonly from?: TableReferenceNode;
     readonly joins: JoinNode[];
@@ -207,6 +208,7 @@ export interface ScalarSubqueryExpressionNode extends AstNode<"ScalarSubqueryExp
 
 export interface FunctionCallNode extends AstNode<"FunctionCall"> {
     readonly callee: IdentifierNode;
+    readonly distinct: boolean;
     readonly arguments: ExpressionNode[];
 }
 
@@ -285,6 +287,7 @@ const queryAstScope = scope({
     SelectStatementAst: {
         kind: "'SelectStatement'",
         span: "SourceSpan",
+        distinct: "boolean",
         selectItems: "SelectItemNode[]",
         "from?": "TableReferenceNode",
         joins: "JoinNode[]",
@@ -445,6 +448,7 @@ const queryAstScope = scope({
         kind: "'FunctionCall'",
         span: "SourceSpan",
         callee: "IdentifierNode",
+        distinct: "boolean",
         arguments: "ExpressionNode[]",
     },
     CastExpressionNode: {

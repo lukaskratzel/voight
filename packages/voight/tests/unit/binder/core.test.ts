@@ -248,8 +248,90 @@ describe("bind", () => {
         }
     });
 
+    test("binds SELECT DISTINCT and COUNT(DISTINCT ...)", () => {
+        const ast = parseQuery("SELECT DISTINCT COUNT(DISTINCT id) FROM users");
+
+        const result = bind(ast, createTestCatalog());
+        expect(result.ok).toBe(true);
+        if (!result.ok) {
+            return;
+        }
+
+        expect(result.value.body.distinct).toBe(true);
+        const selectItem = result.value.body.selectItems[0];
+        expect(selectItem?.kind).toBe("BoundSelectExpressionItem");
+        if (selectItem?.kind === "BoundSelectExpressionItem") {
+            expect(selectItem.expression.kind).toBe("BoundFunctionCall");
+            if (selectItem.expression.kind === "BoundFunctionCall") {
+                expect(selectItem.expression.distinct).toBe(true);
+            }
+        }
+    });
+
+    test("binds SELECT DISTINCT projections without misparsing DISTINCT as an identifier", () => {
+        const ast = parseQuery("SELECT DISTINCT id FROM users");
+
+        const result = bind(ast, createTestCatalog());
+        expect(result.ok).toBe(true);
+        if (!result.ok) {
+            return;
+        }
+
+        expect(result.value.body.distinct).toBe(true);
+        expect(result.value.output.map((column) => column.name)).toEqual(["id"]);
+        const selectItem = result.value.body.selectItems[0];
+        expect(selectItem?.kind).toBe("BoundSelectExpressionItem");
+        if (selectItem?.kind === "BoundSelectExpressionItem") {
+            expect(selectItem.expression.kind).toBe("BoundColumnReference");
+        }
+    });
+
+    test("binds COUNT(DISTINCT qualified_column)", () => {
+        const ast = parseQuery("SELECT COUNT(DISTINCT users.id) FROM users");
+
+        const result = bind(ast, createTestCatalog());
+        expect(result.ok).toBe(true);
+        if (!result.ok) {
+            return;
+        }
+
+        const selectItem = result.value.body.selectItems[0];
+        expect(selectItem?.kind).toBe("BoundSelectExpressionItem");
+        if (selectItem?.kind === "BoundSelectExpressionItem") {
+            expect(selectItem.expression.kind).toBe("BoundFunctionCall");
+            if (selectItem.expression.kind === "BoundFunctionCall") {
+                expect(selectItem.expression.distinct).toBe(true);
+                expect(selectItem.expression.arguments[0]?.kind).toBe("BoundColumnReference");
+            }
+        }
+    });
+
     test("rejects qualified wildcard arguments inside COUNT", () => {
         const ast = parseQuery("SELECT COUNT(u.*) FROM users AS u");
+
+        const result = bind(ast, createTestCatalog());
+        expect(result.ok).toBe(false);
+        if (result.ok) {
+            return;
+        }
+
+        expect(result.diagnostics[0]?.code).toBe(DiagnosticCode.UnsupportedConstruct);
+    });
+
+    test("rejects DISTINCT wildcard arguments inside COUNT", () => {
+        const ast = parseQuery("SELECT COUNT(DISTINCT *) FROM users");
+
+        const result = bind(ast, createTestCatalog());
+        expect(result.ok).toBe(false);
+        if (result.ok) {
+            return;
+        }
+
+        expect(result.diagnostics[0]?.code).toBe(DiagnosticCode.UnsupportedConstruct);
+    });
+
+    test("rejects DISTINCT qualified wildcard arguments inside COUNT", () => {
+        const ast = parseQuery("SELECT COUNT(DISTINCT u.*) FROM users AS u");
 
         const result = bind(ast, createTestCatalog());
         expect(result.ok).toBe(false);

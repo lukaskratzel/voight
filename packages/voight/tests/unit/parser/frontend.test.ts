@@ -76,6 +76,7 @@ describe("native frontend", () => {
         expect(projection.ok).toBe(true);
         if (projection.ok) {
             expect(projection.value.body.from).toBeUndefined();
+            expect(projection.value.body.distinct).toBe(false);
             expect(projection.value.body.selectItems).toHaveLength(1);
         }
 
@@ -86,6 +87,71 @@ describe("native frontend", () => {
             expect(wildcard.value.body.selectItems[1]?.kind).toBe("SelectWildcardItem");
             expect(wildcard.value.body.limit?.offset?.kind).toBe("Literal");
             expect(wildcard.value.body.limit?.count.kind).toBe("Literal");
+        }
+    });
+
+    test("parses SELECT DISTINCT and COUNT(DISTINCT ...)", () => {
+        const selectDistinct = parse("SELECT DISTINCT id FROM users");
+        expect(selectDistinct.ok).toBe(true);
+        if (selectDistinct.ok) {
+            expect(selectDistinct.value.body.distinct).toBe(true);
+            const first = selectDistinct.value.body.selectItems[0];
+            expect(first?.kind).toBe("SelectExpressionItem");
+            if (first?.kind === "SelectExpressionItem") {
+                expect(first.expression.kind).toBe("IdentifierExpression");
+            }
+        }
+
+        const selectDistinctMultiple = parse("SELECT DISTINCT u.id, u.name FROM users u");
+        expect(selectDistinctMultiple.ok).toBe(true);
+        if (selectDistinctMultiple.ok) {
+            expect(selectDistinctMultiple.value.body.distinct).toBe(true);
+            expect(selectDistinctMultiple.value.body.selectItems).toHaveLength(2);
+            expect(selectDistinctMultiple.value.body.selectItems[0]?.kind).toBe(
+                "SelectExpressionItem",
+            );
+            expect(selectDistinctMultiple.value.body.selectItems[1]?.kind).toBe(
+                "SelectExpressionItem",
+            );
+        }
+
+        const selectDistinctWildcard = parse("SELECT DISTINCT * FROM users");
+        expect(selectDistinctWildcard.ok).toBe(true);
+        if (selectDistinctWildcard.ok) {
+            expect(selectDistinctWildcard.value.body.distinct).toBe(true);
+            expect(selectDistinctWildcard.value.body.selectItems[0]?.kind).toBe(
+                "SelectWildcardItem",
+            );
+        }
+
+        const countDistinct = parse("SELECT COUNT(DISTINCT id) FROM users");
+        expect(countDistinct.ok).toBe(true);
+        if (countDistinct.ok) {
+            const first = countDistinct.value.body.selectItems[0];
+            expect(first?.kind).toBe("SelectExpressionItem");
+            if (
+                first?.kind === "SelectExpressionItem" &&
+                first.expression.kind === "FunctionCall"
+            ) {
+                expect(first.expression.callee.name).toBe("COUNT");
+                expect(first.expression.distinct).toBe(true);
+                expect(first.expression.arguments).toHaveLength(1);
+                expect(first.expression.arguments[0]?.kind).toBe("IdentifierExpression");
+            }
+        }
+
+        const qualifiedCountDistinct = parse("SELECT COUNT(DISTINCT users.id) FROM users");
+        expect(qualifiedCountDistinct.ok).toBe(true);
+        if (qualifiedCountDistinct.ok) {
+            const first = qualifiedCountDistinct.value.body.selectItems[0];
+            expect(first?.kind).toBe("SelectExpressionItem");
+            if (
+                first?.kind === "SelectExpressionItem" &&
+                first.expression.kind === "FunctionCall"
+            ) {
+                expect(first.expression.distinct).toBe(true);
+                expect(first.expression.arguments[0]?.kind).toBe("QualifiedReference");
+            }
         }
     });
 

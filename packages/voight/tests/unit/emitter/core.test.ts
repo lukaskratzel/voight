@@ -51,6 +51,20 @@ describe("emit", () => {
         );
     });
 
+    test("emits SELECT DISTINCT and COUNT(DISTINCT ...)", () => {
+        const result = emit(
+            bindStatement("SELECT DISTINCT COUNT(DISTINCT id) AS unique_users FROM users"),
+        );
+        expect(result.ok).toBe(true);
+        if (!result.ok) {
+            return;
+        }
+
+        expect(result.value.sql).toBe(
+            "SELECT DISTINCT count(DISTINCT `users`.`id`) AS `unique_users` FROM `users`",
+        );
+    });
+
     test("escapes trailing backslashes in string literals for MySQL-safe output", () => {
         const result = emit(bindStatement("SELECT 'abc\\'"));
         expect(result.ok).toBe(true);

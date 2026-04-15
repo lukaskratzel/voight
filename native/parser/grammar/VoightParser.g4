@@ -25,7 +25,7 @@ columnList
     ;
 
 selectStatement
-    : SELECT selectItem (COMMA selectItem)*
+    : SELECT DISTINCT? selectItem (COMMA selectItem)*
       fromClause?
       joinClause*
       whereClause?
@@ -146,7 +146,7 @@ primaryExpression
     | CURRENT_DATE
     | CURRENT_TIME
     | ASTERISK
-    | identifier LPAREN argumentList? RPAREN
+    | identifier LPAREN (DISTINCT argumentList | argumentList)? RPAREN
     | identifier DOT ASTERISK
     | identifier DOT identifier
     | identifier

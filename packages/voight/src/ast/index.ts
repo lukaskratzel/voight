@@ -103,6 +103,7 @@ export interface BoundCommonTableExpression extends AstNode {
 export interface BoundSelectStatement extends AstNode {
     readonly kind: "BoundSelectStatement";
     readonly ast: SelectStatementAst;
+    readonly distinct: boolean;
     readonly selectItems: readonly BoundSelectItem[];
     readonly from?: BoundTableReference;
     readonly joins: readonly BoundJoin[];
@@ -224,6 +225,7 @@ export interface BoundFunctionCall extends AstNode {
     readonly kind: "BoundFunctionCall";
     readonly ast: FunctionCallNode;
     readonly callee: string;
+    readonly distinct: boolean;
     readonly arguments: readonly BoundExpression[];
 }
 
