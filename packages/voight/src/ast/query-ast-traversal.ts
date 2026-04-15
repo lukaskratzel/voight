@@ -139,6 +139,18 @@ function mapExpressionAst(
             return {
                 ...expression,
                 arguments: expression.arguments.map((arg) => mapExpressionAst(arg, rewriteSelect)),
+                over: expression.over
+                    ? {
+                          ...expression.over,
+                          partitionBy: expression.over.partitionBy.map((value) =>
+                              mapExpressionAst(value, rewriteSelect),
+                          ),
+                          orderBy: expression.over.orderBy.map((item) => ({
+                              ...item,
+                              expression: mapExpressionAst(item.expression, rewriteSelect),
+                          })),
+                      }
+                    : undefined,
             };
         case "CastExpression":
             return {

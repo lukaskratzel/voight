@@ -275,6 +275,33 @@ describe("@voight/voight-parser", () => {
         });
     });
 
+    it("returns window function specifications in json output", () => {
+        const result = parseQueryJson(
+            "SELECT SUM(total) OVER (PARTITION BY user_id ORDER BY created_at DESC) FROM orders",
+        );
+
+        expect(result.body.selectItems[0]).toMatchObject({
+            kind: "SelectExpressionItem",
+            expression: {
+                kind: "FunctionCall",
+                over: {
+                    kind: "WindowSpecification",
+                    partitionBy: [
+                        {
+                            kind: "IdentifierExpression",
+                        },
+                    ],
+                    orderBy: [
+                        {
+                            kind: "OrderByItem",
+                            direction: "DESC",
+                        },
+                    ],
+                },
+            },
+        });
+    });
+
     it("returns syntax failures as structured JSON", () => {
         const result = parseQueryJson("SELECT FROM");
 

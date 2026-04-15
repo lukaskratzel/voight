@@ -65,6 +65,22 @@ describe("emit", () => {
         );
     });
 
+    test("emits window functions canonically", () => {
+        const result = emit(
+            bindStatement(
+                "SELECT SUM(total) OVER (PARTITION BY user_id ORDER BY created_at DESC) AS running_total, COUNT(*) OVER () AS total_rows FROM orders",
+            ),
+        );
+        expect(result.ok).toBe(true);
+        if (!result.ok) {
+            return;
+        }
+
+        expect(result.value.sql).toBe(
+            "SELECT sum(`orders`.`total`) OVER (PARTITION BY `orders`.`user_id` ORDER BY `orders`.`created_at` DESC) AS `running_total`, count(*) OVER () AS `total_rows` FROM `orders`",
+        );
+    });
+
     test("escapes trailing backslashes in string literals for MySQL-safe output", () => {
         const result = emit(bindStatement("SELECT 'abc\\'"));
         expect(result.ok).toBe(true);

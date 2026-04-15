@@ -169,7 +169,7 @@ function emitBoundExpression(expression: BoundExpression, parameterIndices: numb
                 emitBoundBinaryOperand(expression.right, expression.operator, parameterIndices),
             );
         case "BoundFunctionCall":
-            return `${expression.callee}(${expression.distinct ? "DISTINCT " : ""}${expression.arguments.map((arg) => emitBoundExpression(arg, parameterIndices)).join(", ")})`;
+            return `${expression.callee}(${expression.distinct ? "DISTINCT " : ""}${expression.arguments.map((arg) => emitBoundExpression(arg, parameterIndices)).join(", ")})${expression.over ? ` ${emitWindowSpecification(expression.over, parameterIndices)}` : ""}`;
         case "BoundCastExpression":
             return `CAST(${emitBoundExpression(expression.expression, parameterIndices)} AS ${emitCastType(expression.targetType)})`;
         case "BoundCaseExpression":
@@ -193,6 +193,38 @@ function emitBoundExpression(expression: BoundExpression, parameterIndices: numb
         case "BoundScalarSubqueryExpression":
             return `(${emitBoundQuery(expression.query, parameterIndices)})`;
     }
+}
+
+function emitWindowSpecification(
+    specification: Extract<BoundExpression, { kind: "BoundFunctionCall" }>["over"],
+    parameterIndices: number[],
+): string {
+    if (!specification) {
+        throw new Error("Cannot emit a missing window specification.");
+    }
+
+    const parts = ["OVER ("];
+
+    if (specification.partitionBy.length > 0) {
+        parts.push(
+            `PARTITION BY ${specification.partitionBy
+                .map((expression) => emitBoundExpression(expression, parameterIndices))
+                .join(", ")}`,
+        );
+    }
+
+    if (specification.orderBy.length > 0) {
+        const orderBy = specification.orderBy
+            .map(
+                (item) =>
+                    `${emitBoundExpression(item.expression, parameterIndices)} ${item.direction}`,
+            )
+            .join(", ");
+        parts.push(`${specification.partitionBy.length > 0 ? " " : ""}ORDER BY ${orderBy}`);
+    }
+
+    parts.push(")");
+    return parts.join("");
 }
 
 function emitCaseExpression(

@@ -230,6 +230,35 @@ describe("native frontend", () => {
         }
     });
 
+    test("parses window functions with OVER, PARTITION BY, and ORDER BY", () => {
+        const parsed = parse(
+            "SELECT SUM(total) OVER (PARTITION BY user_id ORDER BY created_at DESC) AS running_total, COUNT(*) OVER () AS total_rows FROM orders",
+        );
+
+        expect(parsed.ok).toBe(true);
+        if (!parsed.ok) {
+            return;
+        }
+
+        const first = parsed.value.body.selectItems[0];
+        expect(first?.kind).toBe("SelectExpressionItem");
+        if (first?.kind === "SelectExpressionItem" && first.expression.kind === "FunctionCall") {
+            expect(first.expression.callee.name).toBe("SUM");
+            expect(first.expression.over?.partitionBy).toHaveLength(1);
+            expect(first.expression.over?.partitionBy[0]?.kind).toBe("IdentifierExpression");
+            expect(first.expression.over?.orderBy).toHaveLength(1);
+            expect(first.expression.over?.orderBy[0]?.direction).toBe("DESC");
+        }
+
+        const second = parsed.value.body.selectItems[1];
+        expect(second?.kind).toBe("SelectExpressionItem");
+        if (second?.kind === "SelectExpressionItem" && second.expression.kind === "FunctionCall") {
+            expect(second.expression.callee.name).toBe("COUNT");
+            expect(second.expression.over?.partitionBy).toEqual([]);
+            expect(second.expression.over?.orderBy).toEqual([]);
+        }
+    });
+
     test("parses LIKE predicates as binary expressions", () => {
         const result = parse("SELECT id FROM users WHERE name LIKE 'adm%n'");
 

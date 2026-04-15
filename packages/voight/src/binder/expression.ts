@@ -16,12 +16,14 @@ import type {
     BoundIsNullExpression,
     BoundLimitClause,
     BoundLiteral,
+    BoundOrderByItem,
     BoundParameter,
     BoundQuery,
     BoundScalarSubqueryExpression,
     BoundTableReference,
     BoundUnaryExpression,
     BoundWildcardExpression,
+    BoundWindowSpecification,
     CaseExpressionNode,
     CastExpressionNode,
     ExistsExpressionNode,
@@ -37,6 +39,7 @@ import type {
     ScalarSubqueryExpressionNode,
     UnaryExpressionNode,
     WildcardExpressionNode,
+    WindowSpecificationNode,
 } from "../ast";
 import { normalizeIdentifier, type Catalog } from "../catalog";
 import { isTrustedAstNode } from "../compiler/trusted-ast";
@@ -278,6 +281,11 @@ function bindFunction(
         }
     }
 
+    const over = node.over ? bindWindowSpecification(context, node.over) : undefined;
+    if (over && !over.ok) {
+        return over;
+    }
+
     return stageSuccess(
         CompilerStage.Binder,
         {
@@ -287,6 +295,48 @@ function bindFunction(
             callee,
             distinct: node.distinct,
             arguments: args,
+            over: over?.value,
+        },
+        { scopeSize: context.scopeSize() },
+    );
+}
+
+function bindWindowSpecification(
+    context: BinderExpressionContext,
+    node: WindowSpecificationNode,
+): BindResult<BoundWindowSpecification> {
+    const partitionBy: BoundExpression[] = [];
+    for (const expression of node.partitionBy) {
+        const bound = context.bindExpression(expression);
+        if (!bound.ok) {
+            return bound;
+        }
+        partitionBy.push(bound.value);
+    }
+
+    const orderBy: BoundOrderByItem[] = [];
+    for (const item of node.orderBy) {
+        const bound = context.bindExpression(item.expression);
+        if (!bound.ok) {
+            return bound;
+        }
+        orderBy.push({
+            kind: "BoundOrderByItem",
+            span: item.span,
+            ast: item,
+            expression: bound.value,
+            direction: item.direction,
+        });
+    }
+
+    return stageSuccess(
+        CompilerStage.Binder,
+        {
+            kind: "BoundWindowSpecification",
+            span: node.span,
+            ast: node,
+            partitionBy,
+            orderBy,
         },
         { scopeSize: context.scopeSize() },
     );

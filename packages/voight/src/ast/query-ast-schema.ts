@@ -210,6 +210,12 @@ export interface FunctionCallNode extends AstNode<"FunctionCall"> {
     readonly callee: IdentifierNode;
     readonly distinct: boolean;
     readonly arguments: ExpressionNode[];
+    readonly over?: WindowSpecificationNode;
+}
+
+export interface WindowSpecificationNode extends AstNode<"WindowSpecification"> {
+    readonly partitionBy: ExpressionNode[];
+    readonly orderBy: OrderByItemNode[];
 }
 
 export interface CastExpressionNode extends AstNode<"CastExpression"> {
@@ -450,6 +456,13 @@ const queryAstScope = scope({
         callee: "IdentifierNode",
         distinct: "boolean",
         arguments: "ExpressionNode[]",
+        "over?": "WindowSpecificationNode",
+    },
+    WindowSpecificationNode: {
+        kind: "'WindowSpecification'",
+        span: "SourceSpan",
+        partitionBy: "ExpressionNode[]",
+        orderBy: "OrderByItemNode[]",
     },
     CastExpressionNode: {
         kind: "'CastExpression'",

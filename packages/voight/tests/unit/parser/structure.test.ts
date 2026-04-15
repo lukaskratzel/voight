@@ -59,8 +59,19 @@ describe("parser structural boundaries", () => {
     test("fails unsupported SQL constructs outside the grammar subset", () => {
         expect(compileStrict("SELECT id FROM users WHERE age BETWEEN 18 AND 65").ok).toBe(false);
         expect(
-            compileStrict("SELECT ROW_NUMBER() OVER (PARTITION BY id ORDER BY name) FROM users").ok,
+            compileStrict(
+                "SELECT SUM(id) OVER (ORDER BY id ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) FROM users",
+            ).ok,
         ).toBe(false);
+    });
+
+    test("accepts window functions with OVER, PARTITION BY, and ORDER BY", () => {
+        expect(compileStrict("SELECT COUNT(*) OVER () FROM users").ok).toBe(true);
+        expect(
+            compileStrict(
+                "SELECT SUM(id) OVER (PARTITION BY age ORDER BY created_at DESC) FROM users",
+            ).ok,
+        ).toBe(true);
     });
 
     test("accepts LIKE predicates", () => {
