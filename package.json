@@ -1,0 +1,16 @@
+{
+    "name": "voight-workspace",
+    "private": true,
+    "packageManager": "pnpm@10.23.0",
+    "scripts": {
+        "format": "pnpm -r --filter @voight8/voight --filter @voight/voight-parser --if-present format",
+        "format:check": "pnpm -r --filter @voight8/voight --filter @voight/voight-parser --if-present format:check",
+        "fmt": "pnpm run format",
+        "fmt:check": "pnpm run format:check",
+        "typecheck": "pnpm -r --filter @voight8/voight --filter @voight/voight-parser --if-present typecheck",
+        "ts:check": "pnpm run typecheck",
+        "test": "pnpm -r --filter @voight8/voight --filter @voight/voight-parser --if-present test",
+        "parser:build": "pnpm --filter @voight/voight-parser parser:build",
+        "check": "pnpm run format:check && pnpm run typecheck && pnpm run test"
+    }
+}

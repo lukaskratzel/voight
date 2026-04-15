@@ -1,0 +1,9 @@
+{
+    "name": "@voight/native-parser-build",
+    "private": true,
+    "scripts": {
+        "generate": "../../scripts/generate-native-parser.sh",
+        "build:compile": "emmake cmake --build build_wasm --config Release && cmake --install build_wasm",
+        "build": "pnpm run generate && ../../scripts/prepare-cmake-build.sh build_wasm . && emcmake cmake -S . -B build_wasm -G Ninja -DCMAKE_BUILD_TYPE=Release && pnpm run build:compile"
+    }
+}

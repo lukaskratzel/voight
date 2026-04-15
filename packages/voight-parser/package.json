@@ -1,0 +1,23 @@
+{
+    "name": "@voight/voight-parser",
+    "private": true,
+    "type": "module",
+    "module": "./index.ts",
+    "scripts": {
+        "format": "oxfmt index.ts tests package.json tsconfig.json",
+        "format:check": "oxfmt --check index.ts tests package.json tsconfig.json",
+        "fmt": "pnpm run format",
+        "fmt:check": "pnpm run format:check",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "typecheck": "tsc --noEmit",
+        "ts:check": "pnpm run typecheck",
+        "parser:build": "../../scripts/build-parser-wasm.sh"
+    },
+    "devDependencies": {
+        "@types/node": "^24.4.0",
+        "oxfmt": "^0.42.0",
+        "typescript": "^6.0.2",
+        "vitest": "^4.1.2"
+    }
+}

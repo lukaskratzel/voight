@@ -1,0 +1,63 @@
+{
+    "name": "@voight8/voight",
+    "version": "0.1.2",
+    "description": "TypeScript SQL compiler and policy engine for a restricted SELECT subset of MySQL.",
+    "keywords": [
+        "compiler",
+        "mysql",
+        "policy",
+        "sql",
+        "wasm"
+    ],
+    "homepage": "https://github.com/lukaskratzel/voight#readme",
+    "bugs": {
+        "url": "https://github.com/lukaskratzel/voight/issues"
+    },
+    "license": "MIT",
+    "repository": "https://github.com/lukaskratzel/voight",
+    "files": [
+        "dist",
+        "README.md"
+    ],
+    "type": "module",
+    "main": "./dist/index.mjs",
+    "module": "./dist/index.mjs",
+    "types": "./dist/index.d.mts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.mts",
+            "import": "./dist/index.mjs"
+        },
+        "./package.json": "./package.json"
+    },
+    "publishConfig": {
+        "access": "public"
+    },
+    "scripts": {
+        "build": "tsdown && node ../../scripts/prepare-package.mjs",
+        "format": "oxfmt index.ts 'src/**/*.ts' 'tests/**/*.ts' package.json tsconfig.json tsdown.config.ts",
+        "format:check": "oxfmt --check index.ts 'src/**/*.ts' 'tests/**/*.ts' package.json tsconfig.json tsdown.config.ts",
+        "fmt": "pnpm run format",
+        "fmt:check": "pnpm run format:check",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "typecheck": "tsc --noEmit",
+        "ts:check": "pnpm run typecheck"
+    },
+    "dependencies": {
+        "arktype": "^2.1.27"
+    },
+    "devDependencies": {
+        "@emnapi/core": "^1.9.2",
+        "@emnapi/runtime": "^1.9.2",
+        "@types/node": "^24.4.0",
+        "mysql2": "^3.21.1",
+        "oxfmt": "^0.42.0",
+        "tsdown": "^0.21.7",
+        "typescript": "^6.0.2",
+        "vitest": "^4.1.2"
+    },
+    "engines": {
+        "node": ">=20"
+    }
+}

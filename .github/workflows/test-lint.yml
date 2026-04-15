@@ -1,0 +1,94 @@
+name: Testing and Linting
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-lint:
+    runs-on: ubuntu-latest
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_COMPILERCHECK: content
+      CCACHE_NOHASHDIR: "true"
+      VOIGHT_FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/native/parser/.cache/fetchcontent
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.23.0
+          run_install: false
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Restore native dependency cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            native/parser/.cache/fetchcontent
+            tools
+          key: ${{ runner.os }}-native-deps-${{ hashFiles('native/parser/CMakeLists.txt', 'native/parser/grammar/*.g4', 'tools/antlr-toolchain.env') }} 
+
+      - name: Restore ccache
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: ${{ runner.os }}-ccache-${{ github.ref_name }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-ccache-${{ github.ref_name }}-
+            ${{ runner.os }}-ccache-
+
+      - name: Install Emscripten SDK
+        run: |
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
+          "$RUNNER_TEMP/emsdk/emsdk" install latest
+          "$RUNNER_TEMP/emsdk/emsdk" activate latest
+          echo "$RUNNER_TEMP/emsdk" >> "$GITHUB_PATH"
+          echo "$RUNNER_TEMP/emsdk/upstream/emscripten" >> "$GITHUB_PATH"
+
+      - name: Install native build tools
+        run: sudo apt-get update && sudo apt-get install --yes ccache ninja-build
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Clean generated build artifacts
+        run: |
+          rm -rf native/parser/build_wasm
+          rm -rf native/parser/dist
+          rm -rf native/parser/generated
+          rm -rf packages/voight-parser/dist
+          rm -rf packages/voight/dist
+
+      - name: Build wasm bundle
+        run: pnpm parser:build
+
+      - name: Print ccache stats
+        run: ccache --show-stats
+
+      - name: Check formatting
+        run: pnpm format:check
+
+      - name: Run typecheck
+        run: pnpm typecheck
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Build package
+        run: pnpm --filter @voight8/voight build
