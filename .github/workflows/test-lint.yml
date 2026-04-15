@@ -1,9 +1,17 @@
 name: Testing and Linting
 
 on:
-  pull_request:
-  push:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
 
 permissions:
   contents: read
