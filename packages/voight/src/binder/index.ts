@@ -316,6 +316,7 @@ class Binder {
                 kind: "BoundSelectStatement",
                 span: this.#ast.span,
                 ast: this.#ast,
+                distinct: this.#ast.distinct,
                 selectItems: boundSelectItems,
                 from: from?.value,
                 joins,

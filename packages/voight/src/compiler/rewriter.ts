@@ -202,6 +202,9 @@ function validateSelectStatement(node: unknown, path: string, errors: string[]):
     }
 
     validateSpan(node.span, `${path}.span`, errors);
+    if (typeof node.distinct !== "boolean") {
+        errors.push(`${path}.distinct must be a boolean.`);
+    }
     validateArray(node.selectItems, `${path}.selectItems`, errors, validateSelectItem);
     if (typeof node.from !== "undefined") {
         validateTableReference(node.from, `${path}.from`, errors);
@@ -369,6 +372,9 @@ function validateExpression(node: unknown, path: string, errors: string[]): void
             return;
         case "FunctionCall":
             validateIdentifier(node.callee, `${path}.callee`, errors);
+            if (typeof node.distinct !== "boolean") {
+                errors.push(`${path}.distinct must be a boolean.`);
+            }
             validateArray(node.arguments, `${path}.arguments`, errors, validateExpression);
             return;
         case "CastExpression":

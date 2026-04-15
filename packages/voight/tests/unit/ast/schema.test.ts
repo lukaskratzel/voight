@@ -17,6 +17,7 @@ describe("query AST schema", () => {
             body: {
                 kind: "SelectStatement",
                 span: { start: 0, end: 8 },
+                distinct: false,
                 selectItems: [],
             },
         });

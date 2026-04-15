@@ -122,6 +122,7 @@ class NativeAstBuilder {
 
   Json build_select_statement(VoightParser::SelectStatementContext* ctx) {
     Json json = node("SelectStatement", ctx);
+    json["distinct"] = ctx->DISTINCT() != nullptr;
     Json select_items = Json::array();
     select_items.reserveArray(ctx->selectItem().size());
     for (auto* item : ctx->selectItem()) {
@@ -434,6 +435,7 @@ class NativeAstBuilder {
     if (ctx->identifier().size() == 1 && ctx->LPAREN() != nullptr) {
       Json json = node("FunctionCall", ctx);
       json["callee"] = build_identifier(ctx->identifier(0));
+      json["distinct"] = ctx->DISTINCT() != nullptr;
       json["arguments"] =
           ctx->argumentList() != nullptr ? build_argument_list(ctx->argumentList()) : Json::array();
       return json;

@@ -1,6 +1,6 @@
 {
     "name": "@voight8/voight",
-    "version": "0.1.2",
+    "version": "0.1.3",
     "description": "TypeScript SQL compiler and policy engine for a restricted SELECT subset of MySQL.",
     "keywords": [
         "compiler",
