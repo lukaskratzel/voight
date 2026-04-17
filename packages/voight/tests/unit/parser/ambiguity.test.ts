@@ -33,6 +33,23 @@ describe("parser ambiguity boundaries", () => {
         expect(compileStrict("SELECT id FROM users").ok).toBe(true);
     });
 
+    test("allows interval-unit keywords as identifiers and implicit aliases", () => {
+        const implicitAlias = compileStrict("SELECT created_at day FROM orders");
+        expect(implicitAlias.ok).toBe(true);
+        if (implicitAlias.ok) {
+            expect(implicitAlias.emitted?.sql).toContain("AS `day`");
+        }
+
+        const downstreamReference = compileStrict(
+            "WITH daily AS (SELECT created_at AS day FROM orders) SELECT day FROM daily ORDER BY day",
+        );
+        expect(downstreamReference.ok).toBe(true);
+        if (downstreamReference.ok) {
+            expect(downstreamReference.emitted?.sql).toContain("SELECT `daily`.`day` FROM `daily`");
+            expect(downstreamReference.emitted?.sql).toContain("ORDER BY `daily`.`day` ASC");
+        }
+    });
+
     test("distinguishes wildcard projection from multiplication", () => {
         expect(compileStrict("SELECT 1 * 2").ok).toBe(true);
         expect(compileStrict("SELECT * FROM users").ok).toBe(true);

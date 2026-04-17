@@ -211,4 +211,5 @@ qualifiedName
 
 identifier
     : IDENTIFIER
+    | intervalUnit
     ;

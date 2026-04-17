@@ -499,7 +499,7 @@ class NativeAstBuilder {
 
   Json build_identifier(VoightParser::IdentifierContext* ctx) {
     Json json = node("Identifier", ctx);
-    const string text = ctx->IDENTIFIER()->getText();
+    const string text = ctx->getText();
     const bool quoted = !text.empty() && text.front() == '`';
     const string name = quoted ? decode_quoted_identifier(text) : text;
     if (quoted) {

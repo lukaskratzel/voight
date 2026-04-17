@@ -43,13 +43,23 @@ describe("native frontend", () => {
         expect(result.value.body.where?.kind).toBe("InSubqueryExpression");
     });
 
-    test("parses CTEs, quoted identifiers, current keywords, and semicolon-terminated selects", () => {
+    test("parses CTEs, quoted identifiers, interval-unit identifiers, current keywords, and semicolon-terminated selects", () => {
         const cte = parse(
             "WITH recent_orders AS (SELECT user_id FROM orders) SELECT user_id FROM recent_orders",
         );
         expect(cte.ok).toBe(true);
         if (cte.ok) {
             expect(cte.value.with?.ctes[0]?.name.name).toBe("recent_orders");
+        }
+
+        const intervalUnitIdentifier = parse(
+            "WITH daily AS (SELECT created_at AS day FROM orders) SELECT day FROM daily ORDER BY day",
+        );
+        expect(intervalUnitIdentifier.ok).toBe(true);
+        if (intervalUnitIdentifier.ok) {
+            expect(
+                intervalUnitIdentifier.value.with?.ctes[0]?.query.body.selectItems[0]?.kind,
+            ).toBe("SelectExpressionItem");
         }
 
         const quoted = parse("SELECT `name` FROM `users` AS `u` ORDER BY `u`.`name` ASC");
