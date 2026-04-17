@@ -15,6 +15,7 @@ OFFSET: O F F S E T;
 AS: A S;
 INNER: I N N E R;
 LEFT: L E F T;
+CROSS: C R O S S;
 JOIN: J O I N;
 ON: O N;
 AND: A N D;

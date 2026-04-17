@@ -20,7 +20,7 @@ npm install @voight8/voight
 The current package focuses on a constrained `SELECT` surface:
 
 - `WITH` and `SELECT`
-- Derived tables, `INNER JOIN`, and `LEFT JOIN`
+- Derived tables, `CROSS JOIN`, `INNER JOIN`, and `LEFT JOIN`
 - `WHERE`, `GROUP BY`, `HAVING`, `ORDER BY`, `LIMIT`, and `OFFSET`
 - Scalar subqueries, `EXISTS`, `IN (...)`, and `IN (subquery)`
 - Arithmetic and boolean expressions

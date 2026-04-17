@@ -55,7 +55,8 @@ tableReference
     ;
 
 joinClause
-    : ((INNER | LEFT)? JOIN) tableReference ON expression
+    : CROSS JOIN tableReference
+    | ((INNER | LEFT)? JOIN) tableReference ON expression
     ;
 
 whereClause

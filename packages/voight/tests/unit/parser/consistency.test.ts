@@ -7,6 +7,7 @@ describe("parser consistency", () => {
         const queries = [
             "SELECT id, name FROM users WHERE age > 18 ORDER BY name ASC LIMIT 10",
             "SELECT u.id, o.total FROM users AS u INNER JOIN orders AS o ON o.user_id = u.id",
+            "SELECT u.id FROM users AS u CROSS JOIN orders AS o",
             "WITH recent AS (SELECT id FROM users LIMIT 5) SELECT id FROM recent",
             "SELECT id FROM users WHERE id IN (1, 2, 3)",
             "SELECT id FROM users WHERE name IS NOT NULL",

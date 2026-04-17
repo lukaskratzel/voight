@@ -169,7 +169,7 @@ Keep the first grammar deliberately smaller than HogQL. Suggested scope:
 - projection expressions and aliases
 - `FROM`
 - derived tables
-- `INNER JOIN` and `LEFT JOIN`
+- `CROSS JOIN`, `INNER JOIN`, and `LEFT JOIN`
 - `WHERE`
 - `GROUP BY`
 - `HAVING`

@@ -100,6 +100,23 @@ describe("native frontend", () => {
         }
     });
 
+    test("parses CROSS JOIN by normalizing it to an INNER join with a TRUE predicate", () => {
+        const parsed = parse("SELECT u.id FROM users AS u CROSS JOIN orders AS o");
+
+        expect(parsed.ok).toBe(true);
+        if (!parsed.ok) {
+            return;
+        }
+
+        const join = parsed.value.body.joins[0];
+        expect(join?.joinType).toBe("INNER");
+        expect(join?.on.kind).toBe("Literal");
+        if (join?.on.kind === "Literal") {
+            expect(join.on.literalType).toBe("boolean");
+            expect(join.on.value).toBe(true);
+        }
+    });
+
     test("parses SELECT DISTINCT and COUNT(DISTINCT ...)", () => {
         const selectDistinct = parse("SELECT DISTINCT id FROM users");
         expect(selectDistinct.ok).toBe(true);

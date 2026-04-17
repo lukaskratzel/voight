@@ -240,6 +240,46 @@ describe("@voight/voight-parser", () => {
         });
     });
 
+    it("normalizes CROSS JOIN into the existing join AST shape", () => {
+        const result = parseQueryJson("SELECT u.id FROM users AS u CROSS JOIN orders AS o");
+
+        expect(result.body.joins).toEqual([
+            {
+                kind: "Join",
+                span: { start: 28, end: 50 },
+                joinType: "INNER",
+                table: {
+                    kind: "TableReference",
+                    span: { start: 39, end: 50 },
+                    name: {
+                        kind: "QualifiedName",
+                        span: { start: 39, end: 45 },
+                        parts: [
+                            {
+                                kind: "Identifier",
+                                span: { start: 39, end: 45 },
+                                name: "orders",
+                                quoted: false,
+                            },
+                        ],
+                    },
+                    alias: {
+                        kind: "Identifier",
+                        span: { start: 49, end: 50 },
+                        name: "o",
+                        quoted: false,
+                    },
+                },
+                on: {
+                    kind: "Literal",
+                    span: { start: 28, end: 33 },
+                    literalType: "boolean",
+                    value: true,
+                },
+            },
+        ]);
+    });
+
     it("decodes quoted identifiers correctly in json output", () => {
         const result = parseQueryJson("SELECT `two``part` AS `alias_name` FROM `user-table`");
 

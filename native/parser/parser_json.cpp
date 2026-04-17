@@ -213,8 +213,15 @@ class NativeAstBuilder {
 
   Json build_join_clause(VoightParser::JoinClauseContext* ctx) {
     Json json = node("Join", ctx);
-    json["joinType"] = ctx->LEFT() != nullptr ? "LEFT" : "INNER";
     json["table"] = build_table_reference(ctx->tableReference());
+
+    if (ctx->CROSS() != nullptr) {
+      json["joinType"] = "INNER";
+      json["on"] = boolean_literal(true, ctx->CROSS()->getSymbol());
+      return json;
+    }
+
+    json["joinType"] = ctx->LEFT() != nullptr ? "LEFT" : "INNER";
     json["on"] = build_expression(ctx->expression());
     return json;
   }
@@ -557,6 +564,16 @@ class NativeAstBuilder {
     throw ParsingError("Unsupported literal.", span_start(ctx), span_end(ctx));
   }
 
+  Json boolean_literal(bool value, antlr4::Token* token) {
+    Json json = Json::object();
+    json.reserveObject(4);
+    json["kind"] = "Literal";
+    json["span"] = span_json(token);
+    json["literalType"] = "boolean";
+    json["value"] = value;
+    return json;
+  }
+
   Json build_cast_type_argument(VoightParser::CastTypeArgumentContext* ctx) {
     if (ctx->INTEGER_LITERAL() != nullptr) {
       Json json = node("Literal", ctx);
@@ -609,12 +626,28 @@ class NativeAstBuilder {
     return span;
   }
 
+  Json span_json(antlr4::Token* token) {
+    Json span = Json::object();
+    span.reserveObject(2);
+    span["start"] = static_cast<int64_t>(span_start(token));
+    span["end"] = static_cast<int64_t>(span_end(token));
+    return span;
+  }
+
   size_t span_start(antlr4::ParserRuleContext* ctx) {
     return ctx->getStart() != nullptr ? static_cast<size_t>(ctx->getStart()->getStartIndex()) : 0;
   }
 
   size_t span_end(antlr4::ParserRuleContext* ctx) {
     return ctx->getStop() != nullptr ? static_cast<size_t>(ctx->getStop()->getStopIndex() + 1) : 0;
+  }
+
+  size_t span_start(antlr4::Token* token) {
+    return token != nullptr ? static_cast<size_t>(token->getStartIndex()) : 0;
+  }
+
+  size_t span_end(antlr4::Token* token) {
+    return token != nullptr ? static_cast<size_t>(token->getStopIndex() + 1) : 0;
   }
 
   Json binary_expression(const string& op, const Json& left, const Json& right) {

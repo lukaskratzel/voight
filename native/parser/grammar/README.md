@@ -16,7 +16,7 @@ The current grammar intentionally models only the subset already supported by `v
 - `WITH`
 - `SELECT`
 - derived tables
-- `INNER JOIN` and `LEFT JOIN`
+- `CROSS JOIN`, `INNER JOIN`, and `LEFT JOIN`
 - `WHERE`, `GROUP BY`, `HAVING`, `ORDER BY`, `LIMIT`
 - scalar subqueries, `EXISTS`, `IN (...)`, `IN (subquery)`
 - arithmetic and boolean expressions

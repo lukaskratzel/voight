@@ -26,7 +26,7 @@ This repository is a `pnpm` workspace.
 The current compiler intentionally targets a constrained `SELECT`-only surface:
 
 - `WITH` and `SELECT`
-- Derived tables, `INNER JOIN`, and `LEFT JOIN`
+- Derived tables, `CROSS JOIN`, `INNER JOIN`, and `LEFT JOIN`
 - `WHERE`, `GROUP BY`, `HAVING`, `ORDER BY`, `LIMIT`, and `OFFSET`
 - Scalar subqueries, `EXISTS`, `IN (...)`, and `IN (subquery)`
 - Arithmetic and boolean expressions
