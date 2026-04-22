@@ -5,12 +5,12 @@ import { CompilerStage, DiagnosticCode, DiagnosticVisibility } from "../../../sr
 describe("parser initialization", () => {
     afterEach(() => {
         vi.resetModules();
-        vi.doUnmock("../../../src/parser/wasm-loader");
+        vi.doUnmock("../../../src/parser/voight_parser_wasm.js");
     });
 
     test("surfaces native parser loader failures as internal parser diagnostics", async () => {
-        vi.doMock("../../../src/parser/wasm-loader", () => ({
-            createVoightParser: async () => {
+        vi.doMock("../../../src/parser/voight_parser_wasm.js", () => ({
+            default: async () => {
                 throw new Error("mock parser bundle missing");
             },
         }));

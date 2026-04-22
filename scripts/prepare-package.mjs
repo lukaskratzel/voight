@@ -6,7 +6,10 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(scriptDir, "..");
 const parserBundlePath = resolve(rootDir, "packages/voight/src/parser/voight_parser_wasm.js");
 const packageDistDir = resolve(rootDir, "packages/voight/dist");
-const packageBundlePath = resolve(packageDistDir, "voight_parser_wasm.js");
+const staticImportBundlePath = resolve(
+    packageDistDir,
+    "src/parser/voight_parser_wasm.js",
+);
 
 if (!existsSync(parserBundlePath)) {
     throw new Error(
@@ -14,5 +17,5 @@ if (!existsSync(parserBundlePath)) {
     );
 }
 
-mkdirSync(packageDistDir, { recursive: true });
-copyFileSync(parserBundlePath, packageBundlePath);
+mkdirSync(dirname(staticImportBundlePath), { recursive: true });
+copyFileSync(parserBundlePath, staticImportBundlePath);

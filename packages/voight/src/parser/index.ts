@@ -1,4 +1,3 @@
-import { createVoightParser, type VoightParserModule as NativeParserModule } from "./wasm-loader";
 import type { QueryAst } from "../ast";
 import {
     CompilerStage,
@@ -9,10 +8,15 @@ import {
 import { parseNativeParserOutput } from "./native-adapter";
 import { stageFailure, type StageResult } from "../core/result";
 import { createSourceFile, createSpan, type SourceFile } from "../core/source";
+import createNativeParser, { type VoightParserWasmModule } from "./voight_parser_wasm.js";
 
 export type ParseResult<T> = StageResult<T, CompilerStage.Parser, { tokenIndex: number }>;
 
 const nativeParserState = await initializeNativeParser();
+
+interface NativeParserModule {
+    parseQuery(input: string): string;
+}
 
 export function parse(source: string | SourceFile): ParseResult<QueryAst> {
     const sourceFile = typeof source === "string" ? createSourceFile(source) : source;
@@ -63,14 +67,32 @@ async function initializeNativeParser(): Promise<{
     readonly error?: unknown;
 }> {
     try {
+        const wasmParser = await createNativeParser();
+
+        if (!hasParseQuery(wasmParser)) {
+            throw new Error("Voight parser module is missing the parseQuery export.");
+        }
+
+        const parseQuery = wasmParser.parseQuery;
+
         return {
-            module: await createVoightParser(),
+            module: {
+                parseQuery(input: string) {
+                    return parseQuery(input) as string;
+                },
+            },
         };
     } catch (error) {
         return {
             error,
         };
     }
+}
+
+function hasParseQuery(
+    value: VoightParserWasmModule,
+): value is { parseQuery: (input: string) => unknown } {
+    return typeof value.parseQuery === "function";
 }
 
 function runPreflightChecks(sourceFile: SourceFile) {
