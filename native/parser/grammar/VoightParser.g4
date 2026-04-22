@@ -110,6 +110,8 @@ andExpression
 comparisonExpression
     : additiveExpression (
         IS NOT? NULL_SQL
+        | BETWEEN additiveExpression AND additiveExpression
+        | NOT BETWEEN additiveExpression AND additiveExpression
         | IN inPredicate
         | NOT IN inPredicate
         | comparisonOperator additiveExpression

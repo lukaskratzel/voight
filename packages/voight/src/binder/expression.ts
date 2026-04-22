@@ -1,5 +1,7 @@
 import type {
+    BetweenExpressionNode,
     BinaryExpressionNode,
+    BoundBetweenExpression,
     BoundBinaryExpression,
     BoundCaseExpression,
     BoundCaseWhenClause,
@@ -135,6 +137,8 @@ export function bindExpressionNode(
                 } satisfies BoundCurrentKeywordExpression,
                 { scopeSize: context.scopeSize() },
             );
+        case "BetweenExpression":
+            return bindBetween(context, node);
         case "InListExpression":
             return bindInList(context, node);
         case "InSubqueryExpression":
@@ -499,6 +503,40 @@ function bindIsNull(
             operand: operand.value,
             negated: node.negated,
         },
+        { scopeSize: context.scopeSize() },
+    );
+}
+
+function bindBetween(
+    context: BinderExpressionContext,
+    node: BetweenExpressionNode,
+): BindResult<BoundBetweenExpression> {
+    const operand = context.bindExpression(node.operand);
+    if (!operand.ok) {
+        return operand;
+    }
+
+    const lower = context.bindExpression(node.lower);
+    if (!lower.ok) {
+        return lower;
+    }
+
+    const upper = context.bindExpression(node.upper);
+    if (!upper.ok) {
+        return upper;
+    }
+
+    return stageSuccess(
+        CompilerStage.Binder,
+        {
+            kind: "BoundBetweenExpression",
+            span: node.span,
+            ast: node,
+            operand: operand.value,
+            lower: lower.value,
+            upper: upper.value,
+            negated: node.negated,
+        } satisfies BoundBetweenExpression,
         { scopeSize: context.scopeSize() },
     );
 }

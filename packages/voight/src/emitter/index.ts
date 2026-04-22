@@ -184,6 +184,8 @@ function emitBoundExpression(expression: BoundExpression, parameterIndices: numb
             return `${emitBoundExpression(expression.operand, parameterIndices)} IS ${expression.negated ? "NOT " : ""}NULL`;
         case "BoundCurrentKeywordExpression":
             return expression.keyword;
+        case "BoundBetweenExpression":
+            return `${emitBetweenOperand(expression.operand, parameterIndices)} ${expression.negated ? "NOT " : ""}BETWEEN ${emitBetweenOperand(expression.lower, parameterIndices)} AND ${emitBetweenOperand(expression.upper, parameterIndices)}`;
         case "BoundInListExpression":
             return `${emitBoundExpression(expression.operand, parameterIndices)} ${expression.negated ? "NOT " : ""}IN (${expression.values.map((value) => emitBoundExpression(value, parameterIndices)).join(", ")})`;
         case "BoundInSubqueryExpression":
@@ -225,6 +227,20 @@ function emitWindowSpecification(
 
     parts.push(")");
     return parts.join("");
+}
+
+function emitBetweenOperand(expression: BoundExpression, parameterIndices: number[]): string {
+    const emitted = emitBoundExpression(expression, parameterIndices);
+    switch (expression.kind) {
+        case "BoundBinaryExpression":
+        case "BoundBetweenExpression":
+        case "BoundInListExpression":
+        case "BoundInSubqueryExpression":
+        case "BoundIsNullExpression":
+            return `(${emitted})`;
+        default:
+            return emitted;
+    }
 }
 
 function emitCaseExpression(

@@ -75,6 +75,11 @@ function visitBoundExpression(expression: BoundExpression, visitor: BoundTreeVis
             visitBoundExpression(expression.operand, visitor);
             expression.values.forEach((value) => visitBoundExpression(value, visitor));
             return;
+        case "BoundBetweenExpression":
+            visitBoundExpression(expression.operand, visitor);
+            visitBoundExpression(expression.lower, visitor);
+            visitBoundExpression(expression.upper, visitor);
+            return;
         case "BoundInSubqueryExpression":
             visitBoundExpression(expression.operand, visitor);
             visitBoundQuery(expression.query, visitor);

@@ -224,6 +224,31 @@ describe("native frontend", () => {
         }
     });
 
+    test("parses BETWEEN and NOT BETWEEN expressions", () => {
+        const between = parse("SELECT id FROM users WHERE age BETWEEN 18 AND 65");
+        expect(between.ok).toBe(true);
+        if (between.ok) {
+            const expression = between.value.body.where;
+            expect(expression?.kind).toBe("BetweenExpression");
+            if (expression?.kind === "BetweenExpression") {
+                expect(expression.negated).toBe(false);
+                expect(expression.operand.kind).toBe("IdentifierExpression");
+                expect(expression.lower.kind).toBe("Literal");
+                expect(expression.upper.kind).toBe("Literal");
+            }
+        }
+
+        const notBetween = parse("SELECT id FROM users WHERE age NOT BETWEEN 18 AND 65");
+        expect(notBetween.ok).toBe(true);
+        if (notBetween.ok) {
+            const expression = notBetween.value.body.where;
+            expect(expression?.kind).toBe("BetweenExpression");
+            if (expression?.kind === "BetweenExpression") {
+                expect(expression.negated).toBe(true);
+            }
+        }
+    });
+
     test("parses INTERVAL expressions inside MySQL date arithmetic functions", () => {
         const parsed = parse(
             "SELECT DATE_ADD('2026-04-08', INTERVAL 1 DAY), DATE_SUB('2026-04-08', INTERVAL ? MONTH)",

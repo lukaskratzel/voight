@@ -408,6 +408,28 @@ class TenantScopingPolicy implements CompilerPolicy {
                         this.#rewriteExpression(entry, contextValues, visibleCtes, catalog),
                     ),
                 };
+            case "BetweenExpression":
+                return {
+                    ...expression,
+                    operand: this.#rewriteExpression(
+                        expression.operand,
+                        contextValues,
+                        visibleCtes,
+                        catalog,
+                    ),
+                    lower: this.#rewriteExpression(
+                        expression.lower,
+                        contextValues,
+                        visibleCtes,
+                        catalog,
+                    ),
+                    upper: this.#rewriteExpression(
+                        expression.upper,
+                        contextValues,
+                        visibleCtes,
+                        catalog,
+                    ),
+                };
             case "InSubqueryExpression":
                 return {
                     ...expression,

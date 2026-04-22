@@ -417,6 +417,14 @@ function validateExpression(node: unknown, path: string, errors: string[]): void
                 errors.push(`${path}.keyword must be a supported CURRENT_* keyword.`);
             }
             return;
+        case "BetweenExpression":
+            if (typeof node.negated !== "boolean") {
+                errors.push(`${path}.negated must be a boolean.`);
+            }
+            validateExpression(node.operand, `${path}.operand`, errors);
+            validateExpression(node.lower, `${path}.lower`, errors);
+            validateExpression(node.upper, `${path}.upper`, errors);
+            return;
         case "InListExpression":
             if (typeof node.negated !== "boolean") {
                 errors.push(`${path}.negated must be a boolean.`);

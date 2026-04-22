@@ -57,7 +57,6 @@ describe("parser structural boundaries", () => {
     });
 
     test("fails unsupported SQL constructs outside the grammar subset", () => {
-        expect(compileStrict("SELECT id FROM users WHERE age BETWEEN 18 AND 65").ok).toBe(false);
         expect(
             compileStrict(
                 "SELECT SUM(id) OVER (ORDER BY id ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) FROM users",

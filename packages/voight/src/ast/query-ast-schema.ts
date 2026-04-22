@@ -97,6 +97,7 @@ export type ExpressionNode =
     | WildcardExpressionNode
     | IsNullExpressionNode
     | CurrentKeywordExpressionNode
+    | BetweenExpressionNode
     | InListExpressionNode
     | InSubqueryExpressionNode
     | ExistsExpressionNode
@@ -185,6 +186,13 @@ export interface CurrentKeywordExpressionNode extends AstNode<"CurrentKeywordExp
     readonly keyword: "CURRENT_TIMESTAMP" | "CURRENT_DATE" | "CURRENT_TIME";
 }
 
+export interface BetweenExpressionNode extends AstNode<"BetweenExpression"> {
+    readonly operand: ExpressionNode;
+    readonly lower: ExpressionNode;
+    readonly upper: ExpressionNode;
+    readonly negated: boolean;
+}
+
 export interface InListExpressionNode extends AstNode<"InListExpression"> {
     readonly operand: ExpressionNode;
     readonly values: ExpressionNode[];
@@ -251,7 +259,7 @@ export interface GroupingExpressionNode extends AstNode<"GroupingExpression"> {
 }
 
 const expressionNodeDefinition =
-    "IdentifierExpressionNode | LiteralNode | ParameterNode | UnaryExpressionNode | BinaryExpressionNode | FunctionCallNode | CastExpressionNode | CaseExpressionNode | IntervalExpressionNode | QualifiedReferenceNode | GroupingExpressionNode | WildcardExpressionNode | IsNullExpressionNode | CurrentKeywordExpressionNode | InListExpressionNode | InSubqueryExpressionNode | ExistsExpressionNode | ScalarSubqueryExpressionNode" as const;
+    "IdentifierExpressionNode | LiteralNode | ParameterNode | UnaryExpressionNode | BinaryExpressionNode | FunctionCallNode | CastExpressionNode | CaseExpressionNode | IntervalExpressionNode | QualifiedReferenceNode | GroupingExpressionNode | WildcardExpressionNode | IsNullExpressionNode | CurrentKeywordExpressionNode | BetweenExpressionNode | InListExpressionNode | InSubqueryExpressionNode | ExistsExpressionNode | ScalarSubqueryExpressionNode" as const;
 
 const literalNodeDefinition =
     "StringLiteralNode | IntegerLiteralNode | DecimalLiteralNode | BooleanLiteralNode | NullLiteralNode" as const;
@@ -424,6 +432,14 @@ const queryAstScope = scope({
         kind: "'CurrentKeywordExpression'",
         span: "SourceSpan",
         keyword: "'CURRENT_TIMESTAMP' | 'CURRENT_DATE' | 'CURRENT_TIME'",
+    },
+    BetweenExpressionNode: {
+        kind: "'BetweenExpression'",
+        span: "SourceSpan",
+        operand: "ExpressionNode",
+        lower: "ExpressionNode",
+        upper: "ExpressionNode",
+        negated: "boolean",
     },
     InListExpressionNode: {
         kind: "'InListExpression'",

@@ -151,6 +151,12 @@ export function findNonSelectableProjectionReference(
                     .map((value) => findNonSelectableProjectionReference(value))
                     .find((value) => typeof value !== "undefined")
             );
+        case "BoundBetweenExpression":
+            return (
+                findNonSelectableProjectionReference(expression.operand) ??
+                findNonSelectableProjectionReference(expression.lower) ??
+                findNonSelectableProjectionReference(expression.upper)
+            );
         case "BoundInSubqueryExpression":
             return findNonSelectableProjectionReference(expression.operand);
         case "BoundLiteral":

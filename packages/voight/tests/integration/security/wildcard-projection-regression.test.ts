@@ -80,6 +80,20 @@ describe("FIXED: wildcard projection respects catalog selectability", () => {
         expect(result.diagnostics[0]?.code).toBe(DiagnosticCode.NonSelectableColumn);
     });
 
+    test("hidden columns are rejected in BETWEEN predicates", () => {
+        const operand = compileScoped("SELECT id FROM users WHERE tenant_id BETWEEN 'a' AND 'z'");
+        expect(operand.ok).toBe(false);
+        expect(operand.diagnostics[0]?.code).toBe(DiagnosticCode.NonSelectableColumn);
+
+        const lower = compileScoped("SELECT id FROM users WHERE id BETWEEN tenant_id AND 'z'");
+        expect(lower.ok).toBe(false);
+        expect(lower.diagnostics[0]?.code).toBe(DiagnosticCode.NonSelectableColumn);
+
+        const upper = compileScoped("SELECT id FROM users WHERE id BETWEEN 'a' AND tenant_id");
+        expect(upper.ok).toBe(false);
+        expect(upper.diagnostics[0]?.code).toBe(DiagnosticCode.NonSelectableColumn);
+    });
+
     test("hidden columns are rejected in ORDER BY clauses too", () => {
         const result = compileScoped("SELECT id FROM users ORDER BY tenant_id");
         expect(result.ok).toBe(false);

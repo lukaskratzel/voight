@@ -316,6 +316,15 @@ class NativeAstBuilder {
           ctx->NOT() != nullptr);
     }
 
+    if (ctx->BETWEEN() != nullptr) {
+      Json json = node("BetweenExpression", ctx);
+      json["operand"] = std::move(expression);
+      json["lower"] = build_additive_expression(ctx->additiveExpression(1));
+      json["upper"] = build_additive_expression(ctx->additiveExpression(2));
+      json["negated"] = ctx->NOT() != nullptr;
+      return json;
+    }
+
     if (ctx->comparisonOperator() != nullptr) {
       return binary_expression(
           comparison_operator_text(ctx->comparisonOperator()),

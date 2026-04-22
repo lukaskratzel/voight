@@ -1,5 +1,6 @@
 import type { ColumnSchema, TableSchema } from "../catalog";
 import type {
+    BetweenExpressionNode,
     BinaryExpressionNode,
     CaseExpressionNode,
     CaseWhenClauseNode,
@@ -35,6 +36,7 @@ import type {
 import type { SourceSpan } from "../core/source";
 
 export type {
+    BetweenExpressionNode,
     BinaryExpressionNode,
     CaseExpressionNode,
     CaseWhenClauseNode,
@@ -190,6 +192,7 @@ export type BoundExpression =
     | BoundWildcardExpression
     | BoundIsNullExpression
     | BoundCurrentKeywordExpression
+    | BoundBetweenExpression
     | BoundInListExpression
     | BoundInSubqueryExpression
     | BoundExistsExpression
@@ -298,6 +301,15 @@ export interface BoundCurrentKeywordExpression extends AstNode {
     readonly kind: "BoundCurrentKeywordExpression";
     readonly ast: CurrentKeywordExpressionNode;
     readonly keyword: CurrentKeywordExpressionNode["keyword"];
+}
+
+export interface BoundBetweenExpression extends AstNode {
+    readonly kind: "BoundBetweenExpression";
+    readonly ast: BetweenExpressionNode;
+    readonly operand: BoundExpression;
+    readonly lower: BoundExpression;
+    readonly upper: BoundExpression;
+    readonly negated: boolean;
 }
 
 export interface BoundInListExpression extends AstNode {

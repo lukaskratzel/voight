@@ -61,6 +61,22 @@ describe("FIXED: expression subqueries are now tenant-scoped", () => {
         expect(result.emitted!.sql).toContain("`timeseries`.`tenant_id` = 'tenant-123'");
     });
 
+    test("BETWEEN scalar subquery operand — tenant predicate injected", () => {
+        const result = compileTenantScoped(
+            "SELECT id FROM users WHERE (SELECT COUNT(timeseries.id) FROM timeseries) BETWEEN 1 AND 10",
+        );
+        expect(result.ok).toBe(true);
+        expect(result.emitted!.sql).toContain("`timeseries`.`tenant_id` = 'tenant-123'");
+    });
+
+    test("BETWEEN scalar subquery bounds — tenant predicates injected", () => {
+        const result = compileTenantScoped(
+            "SELECT id FROM users WHERE age BETWEEN (SELECT MIN(value) FROM timeseries) AND (SELECT MAX(value) FROM timeseries)",
+        );
+        expect(result.ok).toBe(true);
+        expect(result.emitted!.sql.match(/tenant-123/g) ?? []).toHaveLength(2);
+    });
+
     test("NOT IN subquery — tenant predicate injected", () => {
         const result = compileTenantScoped(
             "SELECT id FROM users WHERE id NOT IN (SELECT timeseries.id FROM timeseries)",

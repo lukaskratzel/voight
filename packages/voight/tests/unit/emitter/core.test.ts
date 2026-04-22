@@ -116,4 +116,20 @@ describe("emit", () => {
             "SELECT `users`.`id` FROM `users` WHERE `users`.`name` LIKE 'O''Brien%'",
         );
     });
+
+    test("emits BETWEEN predicates canonically", () => {
+        const result = emit(
+            bindStatement(
+                "SELECT id FROM users WHERE age NOT BETWEEN 18 AND 65 ORDER BY created_at BETWEEN '2024-01-01' AND '2024-12-31' DESC",
+            ),
+        );
+        expect(result.ok).toBe(true);
+        if (!result.ok) {
+            return;
+        }
+
+        expect(result.value.sql).toBe(
+            "SELECT `users`.`id` FROM `users` WHERE `users`.`age` NOT BETWEEN 18 AND 65 ORDER BY `users`.`created_at` BETWEEN '2024-01-01' AND '2024-12-31' DESC",
+        );
+    });
 });

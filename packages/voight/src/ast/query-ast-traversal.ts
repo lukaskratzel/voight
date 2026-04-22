@@ -135,6 +135,13 @@ function mapExpressionAst(
                 operand: mapExpressionAst(expression.operand, rewriteSelect),
                 values: expression.values.map((value) => mapExpressionAst(value, rewriteSelect)),
             };
+        case "BetweenExpression":
+            return {
+                ...expression,
+                operand: mapExpressionAst(expression.operand, rewriteSelect),
+                lower: mapExpressionAst(expression.lower, rewriteSelect),
+                upper: mapExpressionAst(expression.upper, rewriteSelect),
+            };
         case "FunctionCall":
             return {
                 ...expression,

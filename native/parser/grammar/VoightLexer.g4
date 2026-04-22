@@ -30,6 +30,7 @@ ASC: A S C;
 DESC: D E S C;
 WITH: W I T H;
 IN: I N;
+BETWEEN: B E T W E E N;
 EXISTS: E X I S T S;
 CASE: C A S E;
 CAST: C A S T;
