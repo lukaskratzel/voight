@@ -56,6 +56,7 @@ export type BindResult<T> = StageResult<T, CompilerStage.Binder, { scopeSize: nu
 
 export interface BinderExpressionContext {
     readonly catalog: Catalog;
+    readonly resolveSelectAliases: boolean;
     scopeSize(): number;
     bindExpression(node: ExpressionNode): BindResult<BoundExpression>;
     bindSubquery(query: QueryAst): BindResult<BoundQuery>;
@@ -94,6 +95,14 @@ export function bindExpressionNode(
                 { scopeSize: context.scopeSize() },
             );
         case "IdentifierExpression":
+            if (context.resolveSelectAliases) {
+                const alias = context.selectAlias(normalizeIdentifier(node.identifier.name));
+                if (alias) {
+                    return stageSuccess(CompilerStage.Binder, alias, {
+                        scopeSize: context.scopeSize(),
+                    });
+                }
+            }
             return bindUnqualifiedColumn(context, node);
         case "QualifiedReference":
             return bindQualifiedColumn(context, node);
@@ -168,15 +177,6 @@ export function bindOrderByExpressionNode(
     context: BinderExpressionContext,
     node: ExpressionNode,
 ): BindResult<BoundExpression> {
-    if (node.kind === "IdentifierExpression") {
-        const alias = context.selectAlias(normalizeIdentifier(node.identifier.name));
-        if (alias) {
-            return stageSuccess(CompilerStage.Binder, alias, {
-                scopeSize: context.scopeSize(),
-            });
-        }
-    }
-
     return context.bindExpression(node);
 }
 

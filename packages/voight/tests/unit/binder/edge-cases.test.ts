@@ -26,6 +26,65 @@ describe("bind edge cases", () => {
         }
     });
 
+    test("resolves SELECT aliases recursively in ORDER BY", () => {
+        const result = bind(
+            parseQuery("SELECT total AS offered FROM orders ORDER BY offered + 1"),
+            createTestCatalog(),
+        );
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) {
+            return;
+        }
+
+        expect(result.value.body.orderBy[0]?.expression.kind).toBe("BoundBinaryExpression");
+    });
+
+    test("resolves SELECT aliases in GROUP BY", () => {
+        const result = bind(
+            parseQuery("SELECT user_id AS owner_id, SUM(total) FROM orders GROUP BY owner_id"),
+            createTestCatalog(),
+        );
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) {
+            return;
+        }
+
+        expect(result.value.body.groupBy[0]?.kind).toBe("BoundColumnReference");
+        if (result.value.body.groupBy[0]?.kind === "BoundColumnReference") {
+            expect(result.value.body.groupBy[0].column.name).toBe("user_id");
+        }
+    });
+
+    test("resolves SELECT aliases recursively in HAVING", () => {
+        const result = bind(
+            parseQuery(
+                "SELECT user_id, SUM(total) AS offered FROM orders GROUP BY user_id HAVING offered + 1 > 0",
+            ),
+            createTestCatalog(),
+        );
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) {
+            return;
+        }
+
+        expect(result.value.body.having?.kind).toBe("BoundBinaryExpression");
+    });
+
+    test("does not resolve SELECT aliases in WHERE", () => {
+        const result = bind(
+            parseQuery("SELECT total AS offered FROM orders WHERE offered > 0"),
+            createTestCatalog(),
+        );
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+            expect(result.diagnostics[0]?.code).toBe(DiagnosticCode.UnknownColumn);
+        }
+    });
+
     test("binds explicit CTE column lists into the derived table schema", () => {
         // CTE column renaming changes the visible schema for downstream references, so
         // the binder must expose the renamed output column instead of the inner name.

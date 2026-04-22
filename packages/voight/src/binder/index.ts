@@ -70,6 +70,7 @@ class Binder {
     readonly #scope: BinderScopeFrame;
     readonly #selectAliases = new Map<string, BoundExpression>();
     readonly #expressionContext: BinderExpressionContext;
+    readonly #selectAliasExpressionContext: BinderExpressionContext;
 
     constructor(ast: QueryAst | SelectStatementAst, catalog: Catalog, context: BinderContext) {
         this.#ast = ast;
@@ -79,10 +80,19 @@ class Binder {
             tables: new Map(),
             parent: context.parentScope,
         };
-        this.#expressionContext = {
+        this.#expressionContext = this.createExpressionContext(false);
+        this.#selectAliasExpressionContext = this.createExpressionContext(true);
+    }
+
+    createExpressionContext(resolveSelectAliases: boolean): BinderExpressionContext {
+        return {
             catalog: this.#catalog,
+            resolveSelectAliases,
             scopeSize: () => this.#scope.tables.size,
-            bindExpression: (node) => this.bindExpression(node),
+            bindExpression: (node) =>
+                resolveSelectAliases
+                    ? this.bindExpressionWithSelectAliases(node)
+                    : this.bindExpression(node),
             bindSubquery: (query) => this.bindCorrelatedSubquery(query),
             resolveTableAlias: (alias, span) => this.resolveTableAlias(alias, span),
             visibleTables: () => this.visibleTables(),
@@ -272,14 +282,16 @@ class Binder {
 
         const groupBy: BoundExpression[] = [];
         for (const expression of this.#ast.groupBy) {
-            const bound = this.bindExpression(expression);
+            const bound = this.bindExpressionWithSelectAliases(expression);
             if (!bound.ok) {
                 return bound;
             }
             groupBy.push(bound.value);
         }
 
-        const having = this.#ast.having ? this.bindExpression(this.#ast.having) : undefined;
+        const having = this.#ast.having
+            ? this.bindExpressionWithSelectAliases(this.#ast.having)
+            : undefined;
         if (having && !having.ok) {
             return having;
         }
@@ -486,11 +498,15 @@ class Binder {
     }
 
     bindOrderByExpression(node: ExpressionNode): BindResult<BoundExpression> {
-        return bindOrderByExpressionNode(this.#expressionContext, node);
+        return bindOrderByExpressionNode(this.#selectAliasExpressionContext, node);
     }
 
     bindExpression(node: ExpressionNode): BindResult<BoundExpression> {
         return bindExpressionNode(this.#expressionContext, node);
+    }
+
+    bindExpressionWithSelectAliases(node: ExpressionNode): BindResult<BoundExpression> {
+        return bindExpressionNode(this.#selectAliasExpressionContext, node);
     }
 
     bindCorrelatedSubquery(query: QueryAst): BindResult<BoundQuery> {
