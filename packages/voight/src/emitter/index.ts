@@ -361,6 +361,8 @@ function binaryPrecedence(operator: BinaryExpressionNode["operator"]): number {
         case ">":
         case ">=":
         case "LIKE":
+        case "REGEXP":
+        case "RLIKE":
             return 3;
         case "+":
         case "-":
@@ -369,6 +371,9 @@ function binaryPrecedence(operator: BinaryExpressionNode["operator"]): number {
         case "/":
         case "%":
             return 5;
+        default:
+            operator satisfies never;
+            throw new Error(`Unsupported binary operator: ${operator}`);
     }
 }
 

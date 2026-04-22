@@ -131,6 +131,8 @@ comparisonOperator
     | GT
     | GTE
     | LIKE
+    | REGEXP
+    | RLIKE
     ;
 
 additiveExpression

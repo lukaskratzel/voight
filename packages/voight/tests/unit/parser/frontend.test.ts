@@ -327,6 +327,28 @@ describe("native frontend", () => {
         }
     });
 
+    test("parses REGEXP and RLIKE predicates as binary expressions", () => {
+        const regexp = parse("SELECT id FROM users WHERE email REGEXP '^[^@]+@example\\\\.com$'");
+        expect(regexp.ok).toBe(true);
+        if (regexp.ok) {
+            expect(regexp.value.body.where?.kind).toBe("BinaryExpression");
+            if (regexp.value.body.where?.kind === "BinaryExpression") {
+                expect(regexp.value.body.where.operator).toBe("REGEXP");
+                expect(regexp.value.body.where.left.kind).toBe("IdentifierExpression");
+                expect(regexp.value.body.where.right.kind).toBe("Literal");
+            }
+        }
+
+        const rlike = parse("SELECT id FROM users WHERE email RLIKE 'example'");
+        expect(rlike.ok).toBe(true);
+        if (rlike.ok) {
+            expect(rlike.value.body.where?.kind).toBe("BinaryExpression");
+            if (rlike.value.body.where?.kind === "BinaryExpression") {
+                expect(rlike.value.body.where.operator).toBe("RLIKE");
+            }
+        }
+    });
+
     test("reports unsupported statements", () => {
         const result = parse("UPDATE users SET name = 'x'");
 

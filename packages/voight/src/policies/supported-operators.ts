@@ -21,6 +21,8 @@ const SUPPORTED_BINARY_OPERATORS = new Set([
     ">",
     ">=",
     "LIKE",
+    "REGEXP",
+    "RLIKE",
     "AND",
     "OR",
 ]);

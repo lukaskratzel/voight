@@ -117,6 +117,22 @@ describe("emit", () => {
         );
     });
 
+    test("emits REGEXP and RLIKE predicates canonically", () => {
+        const result = emit(
+            bindStatement(
+                "SELECT id FROM users WHERE email REGEXP '^[^@]+@example\\\\.com$' OR name RLIKE 'admin'",
+            ),
+        );
+        expect(result.ok).toBe(true);
+        if (!result.ok) {
+            return;
+        }
+
+        expect(result.value.sql).toBe(
+            "SELECT `users`.`id` FROM `users` WHERE `users`.`email` REGEXP '^[^@]+@example\\\\\\\\.com$' OR `users`.`name` RLIKE 'admin'",
+        );
+    });
+
     test("emits BETWEEN predicates canonically", () => {
         const result = emit(
             bindStatement(

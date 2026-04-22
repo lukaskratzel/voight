@@ -53,6 +53,15 @@ describe("FIXED: expression subqueries are now tenant-scoped", () => {
         expect(result.emitted!.sql).toContain("`timeseries`.`tenant_id` = 'tenant-123'");
     });
 
+    test("REGEXP predicate — scoped table still receives tenant predicate", () => {
+        const result = compileTenantScoped(
+            "SELECT metric FROM timeseries WHERE metric REGEXP '^login'",
+        );
+        expect(result.ok).toBe(true);
+        expect(result.emitted!.sql).toContain("`timeseries`.`tenant_id` = 'tenant-123'");
+        expect(result.emitted!.sql).toContain("`timeseries`.`metric` REGEXP '^login'");
+    });
+
     test("IN subquery — tenant predicate injected", () => {
         const result = compileTenantScoped(
             "SELECT id FROM users WHERE id IN (SELECT timeseries.id FROM timeseries)",

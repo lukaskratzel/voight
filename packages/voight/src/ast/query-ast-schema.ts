@@ -171,6 +171,8 @@ export interface BinaryExpressionNode extends AstNode<"BinaryExpression"> {
         | ">"
         | ">="
         | "LIKE"
+        | "REGEXP"
+        | "RLIKE"
         | "AND"
         | "OR";
     readonly left: ExpressionNode;
@@ -418,7 +420,7 @@ const queryAstScope = scope({
         kind: "'BinaryExpression'",
         span: "SourceSpan",
         operator:
-            "'+' | '-' | '*' | '/' | '%' | '=' | '!=' | '<' | '<=' | '>' | '>=' | 'LIKE' | 'AND' | 'OR'",
+            "'+' | '-' | '*' | '/' | '%' | '=' | '!=' | '<' | '<=' | '>' | '>=' | 'LIKE' | 'REGEXP' | 'RLIKE' | 'AND' | 'OR'",
         left: "ExpressionNode",
         right: "ExpressionNode",
     },

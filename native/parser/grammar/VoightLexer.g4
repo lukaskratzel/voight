@@ -22,6 +22,8 @@ AND: A N D;
 OR: O R;
 NOT: N O T;
 LIKE: L I K E;
+REGEXP: R E G E X P;
+RLIKE: R L I K E;
 IS: I S;
 NULL_SQL: N U L L;
 TRUE_SQL: T R U E;

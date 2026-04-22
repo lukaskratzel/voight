@@ -80,6 +80,16 @@ describe("FIXED: wildcard projection respects catalog selectability", () => {
         expect(result.diagnostics[0]?.code).toBe(DiagnosticCode.NonSelectableColumn);
     });
 
+    test("hidden columns are rejected in REGEXP predicates", () => {
+        const operand = compileScoped("SELECT id FROM users WHERE tenant_id REGEXP '^123$'");
+        expect(operand.ok).toBe(false);
+        expect(operand.diagnostics[0]?.code).toBe(DiagnosticCode.NonSelectableColumn);
+
+        const pattern = compileScoped("SELECT id FROM users WHERE name REGEXP tenant_id");
+        expect(pattern.ok).toBe(false);
+        expect(pattern.diagnostics[0]?.code).toBe(DiagnosticCode.NonSelectableColumn);
+    });
+
     test("hidden columns are rejected in BETWEEN predicates", () => {
         const operand = compileScoped("SELECT id FROM users WHERE tenant_id BETWEEN 'a' AND 'z'");
         expect(operand.ok).toBe(false);

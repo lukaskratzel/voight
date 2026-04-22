@@ -738,6 +738,12 @@ class NativeAstBuilder {
     if (ctx->LIKE() != nullptr) {
       return "LIKE";
     }
+    if (ctx->REGEXP() != nullptr) {
+      return "REGEXP";
+    }
+    if (ctx->RLIKE() != nullptr) {
+      return "RLIKE";
+    }
     throw ParsingError("Unsupported comparison operator.", span_start(ctx), span_end(ctx));
   }
 
