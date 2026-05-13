@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   publish:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_BASEDIR: ${{ github.workspace }}
@@ -54,7 +54,9 @@ jobs:
 
       - name: Install Emscripten SDK
         run: |
-          git clone --no-checkout https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
+          mkdir "$RUNNER_TEMP/emsdk"
+          git -C "$RUNNER_TEMP/emsdk" init
+          git -C "$RUNNER_TEMP/emsdk" remote add origin https://github.com/emscripten-core/emsdk.git
           git -C "$RUNNER_TEMP/emsdk" fetch --depth 1 origin "$EMSDK_REF"
           git -C "$RUNNER_TEMP/emsdk" checkout --detach "$EMSDK_REF"
           "$RUNNER_TEMP/emsdk/emsdk" install "$EMSDK_VERSION"
