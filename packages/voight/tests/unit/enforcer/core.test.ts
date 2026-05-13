@@ -6,15 +6,18 @@ import { allowedFunctionsPolicy, maxLimitPolicy } from "../../../src/policies";
 import { bindStatement } from "../../_support/bind";
 
 describe("enforce", () => {
-    test("does not enforce any function policy unless one is configured", () => {
+    test("denies functions by default when no function policy is configured", () => {
         const bound = bindStatement("SELECT SLEEP(10) FROM users");
         const result = enforce(bound);
 
-        expect(result.ok).toBe(true);
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+            expect(result.diagnostics[0]?.code).toBe(DiagnosticCode.DisallowedFunction);
+        }
     });
 
-    test("allows queries with no configured policies", () => {
-        const bound = bindStatement("SELECT SLEEP(10) FROM users");
+    test("allows function-free queries with no configured policies", () => {
+        const bound = bindStatement("SELECT id FROM users");
         const result = enforce(bound);
 
         expect(result.ok).toBe(true);
@@ -116,7 +119,31 @@ describe("enforce", () => {
         expect(functionLimit.ok).toBe(false);
     });
 
-    test("does not require nested subqueries to carry their own limit", () => {
+    test("rejects negative LIMIT and OFFSET expressions", () => {
+        const negativeLimit = enforce(bindStatement("SELECT id FROM users LIMIT -1"), {
+            policies: [maxLimitPolicy({ maxLimit: 100 })],
+        });
+        expect(negativeLimit.ok).toBe(false);
+
+        const negativeOffset = enforce(bindStatement("SELECT id FROM users LIMIT 1 OFFSET -1"), {
+            policies: [maxLimitPolicy({ maxLimit: 100, maxOffset: 100 })],
+        });
+        expect(negativeOffset.ok).toBe(false);
+    });
+
+    test("enforces comma-form LIMIT count and offset positions", () => {
+        const excessiveOffset = enforce(bindStatement("SELECT id FROM users LIMIT 1000, 1"), {
+            policies: [maxLimitPolicy({ maxLimit: 100, maxOffset: 100 })],
+        });
+        expect(excessiveOffset.ok).toBe(false);
+
+        const excessiveCount = enforce(bindStatement("SELECT id FROM users LIMIT 1, 1000"), {
+            policies: [maxLimitPolicy({ maxLimit: 100, maxOffset: 100 })],
+        });
+        expect(excessiveCount.ok).toBe(false);
+    });
+
+    test("does not require nested subqueries to carry their own limit by default", () => {
         const bound = bindStatement(
             "SELECT users.id FROM users WHERE users.id IN (SELECT orders.id FROM orders) LIMIT 10",
         );
@@ -127,7 +154,22 @@ describe("enforce", () => {
         expect(result.ok).toBe(true);
     });
 
-    test("ignores nested subquery limit sizes when enforcing the outer result size", () => {
+    test("requires limits across scalar, exists, not exists, and in subqueries when recursive", () => {
+        for (const sql of [
+            "SELECT id FROM users WHERE id = (SELECT user_id FROM orders) LIMIT 10",
+            "SELECT id FROM users WHERE EXISTS (SELECT user_id FROM orders) LIMIT 10",
+            "SELECT id FROM users WHERE NOT EXISTS (SELECT user_id FROM orders) LIMIT 10",
+            "SELECT id FROM users WHERE id IN (SELECT user_id FROM orders) LIMIT 10",
+        ]) {
+            const result = enforce(bindStatement(sql), {
+                policies: [maxLimitPolicy({ maxLimit: 100, recursive: true })],
+            });
+
+            expect(result.ok, `Expected nested limit rejection for ${sql}`).toBe(false);
+        }
+    });
+
+    test("ignores nested subquery limit sizes by default", () => {
         const bound = bindStatement(
             "SELECT users.id FROM users WHERE users.id IN (SELECT orders.id FROM orders LIMIT 999999) LIMIT 10",
         );
@@ -136,6 +178,20 @@ describe("enforce", () => {
         });
 
         expect(result.ok).toBe(true);
+    });
+
+    test("rejects nested subquery limit sizes above the configured maximum when recursive", () => {
+        const bound = bindStatement(
+            "SELECT users.id FROM users WHERE users.id IN (SELECT orders.id FROM orders LIMIT 999999) LIMIT 10",
+        );
+        const result = enforce(bound, {
+            policies: [maxLimitPolicy({ maxLimit: 100, recursive: true })],
+        });
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+            expect(result.diagnostics[0]?.code).toBe(DiagnosticCode.LimitExceeded);
+        }
     });
 
     test("allows approved functions and nested expressions", () => {

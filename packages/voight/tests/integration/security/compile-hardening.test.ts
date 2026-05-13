@@ -35,6 +35,35 @@ describe("compile hardening", () => {
         }
     });
 
+    test("rejects quoted callable and cast-type injection surfaces", () => {
+        for (const { sql, message } of [
+            {
+                sql: "SELECT `SLEEP(1); DROP TABLE users; -- `(0)",
+                message: "Function names must be unquoted simple identifiers.",
+            },
+            {
+                sql: "SELECT `GET_LOCK('voight', 10); DROP TABLE users; -- `(0)",
+                message: "Function names must be unquoted simple identifiers.",
+            },
+            {
+                sql: "SELECT CAST(name AS `CHAR); DROP TABLE users; -- `) FROM users",
+                message: "CAST target type names must be unquoted simple identifiers.",
+            },
+            {
+                sql: "SELECT CAST(name AS `CHAR CHARACTER SET utf8mb4 COLLATE utf8mb4_bin`) FROM users",
+                message: "CAST target type names must be unquoted simple identifiers.",
+            },
+        ]) {
+            const result = expectBlocked(sql);
+            expect(result.diagnostics).toContainEqual(
+                expect.objectContaining({
+                    code: DiagnosticCode.UnsupportedConstruct,
+                    message,
+                }),
+            );
+        }
+    });
+
     test("rejects catalog escape attempts against system and cross-database tables", () => {
         const unknownTable = expectBlocked("SELECT * FROM information_schema.tables");
         expect(

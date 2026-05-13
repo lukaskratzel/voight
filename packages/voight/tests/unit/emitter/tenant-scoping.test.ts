@@ -1,24 +1,53 @@
 import { describe, expect, test } from "vitest";
 
-import { tenantScopingPolicy } from "../../../src/policies";
+import { allowedFunctionsPolicy, tenantScopingPolicy } from "../../../src/policies";
 import { compileStrict } from "../../_support/compile";
 
 const tenantPolicy = tenantScopingPolicy({
     tables: ["timeseries", "orders"],
     scopeColumn: "tenant_id",
     contextKey: "tenantId",
+    scopeValueType: "string",
+});
+
+const bigintTenantPolicy = tenantScopingPolicy({
+    tables: ["timeseries", "orders"],
+    scopeColumn: "tenant_id",
+    contextKey: "tenantId",
+    scopeValueType: "bigint",
+});
+
+const numberTenantPolicy = tenantScopingPolicy({
+    tables: ["timeseries", "orders"],
+    scopeColumn: "tenant_id",
+    contextKey: "tenantId",
+    scopeValueType: "number",
+});
+
+const booleanTenantPolicy = tenantScopingPolicy({
+    tables: ["timeseries", "orders"],
+    scopeColumn: "tenant_id",
+    contextKey: "tenantId",
+    scopeValueType: "boolean",
 });
 
 function compileTenantScoped(sql: string, tenantId: unknown = "tenant-123") {
     return compileStrict(sql, {
-        policies: [tenantPolicy],
+        policies: [tenantPolicy, allowedFunctionsPolicy({ allowedFunctions: new Set(["count"]) })],
+        policyContext: { tenantId },
+    });
+}
+
+function compileWithPolicy(sql: string, policy = tenantPolicy, tenantId: unknown = "tenant-123") {
+    return compileStrict(sql, {
+        policies: [policy],
         policyContext: { tenantId },
     });
 }
 
 describe("emitter tenant scoping output", () => {
     test("emits bigint tenant predicates as exact integer literals", () => {
-        const result = compileTenantScoped("SELECT metric FROM timeseries", 42n);
+        const result = compileWithPolicy("SELECT metric FROM timeseries", bigintTenantPolicy, 42n);
         expect(result.ok).toBe(true);
         if (!result.ok) {
             return;
@@ -28,7 +57,11 @@ describe("emitter tenant scoping output", () => {
     });
 
     test("emits the largest supported uint64 tenant value without precision loss", () => {
-        const result = compileTenantScoped("SELECT metric FROM timeseries", 18446744073709551615n);
+        const result = compileWithPolicy(
+            "SELECT metric FROM timeseries",
+            bigintTenantPolicy,
+            18446744073709551615n,
+        );
         expect(result.ok).toBe(true);
         if (!result.ok) {
             return;
@@ -76,17 +109,30 @@ describe("emitter tenant scoping output", () => {
 
     test("renders tenant scope values according to their literal kind", () => {
         const cases = [
-            { tenantId: "my-tenant", fragment: "'my-tenant'" },
-            { tenantId: 42, fragment: "= 42" },
-            { tenantId: true, fragment: "= TRUE" },
-            { tenantId: null, fragment: "IS NULL" },
+            { policy: tenantPolicy, tenantId: "my-tenant", fragment: "'my-tenant'" },
+            { policy: numberTenantPolicy, tenantId: 42, fragment: "= 42" },
+            { policy: numberTenantPolicy, tenantId: 42.5, fragment: "= 42.5" },
+            { policy: booleanTenantPolicy, tenantId: true, fragment: "= TRUE" },
+            { policy: booleanTenantPolicy, tenantId: false, fragment: "= FALSE" },
+            { policy: tenantPolicy, tenantId: null, fragment: "IS NULL" },
         ] as const;
 
-        for (const { tenantId, fragment } of cases) {
-            const result = compileTenantScoped("SELECT metric FROM timeseries", tenantId);
+        for (const { policy, tenantId, fragment } of cases) {
+            const result = compileWithPolicy("SELECT metric FROM timeseries", policy, tenantId);
             expect(result.ok, `Failed for tenant value ${String(tenantId)}`).toBe(true);
             if (result.ok) {
                 expect(result.emitted?.sql).toContain(fragment);
+            }
+        }
+    });
+
+    test("rejects numeric and boolean values for default string tenant guards", () => {
+        for (const tenantId of [42, 42n, true, false]) {
+            const result = compileTenantScoped("SELECT metric FROM timeseries", tenantId);
+
+            expect(result.ok, `Unexpected success for ${String(tenantId)}`).toBe(false);
+            if (!result.ok) {
+                expect(result.diagnostics[0]?.message).toContain("requires string tenant values");
             }
         }
     });
